@@ -1,0 +1,15 @@
+{
+    "name": "Peasant Slime",
+    "description": "A lowly peasant slime.",
+    "image": "https://6ktkpuluwfsg.usemoralis.com/peasant/main.png",
+    "attributes": [
+        {
+            "trait_type": "Rarity",
+            "value": "Common"
+        },
+        {
+            "trait_type": "Hunger",
+            "value": 100
+        }
+    ]
+}
