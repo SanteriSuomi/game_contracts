@@ -9,7 +9,7 @@ contract("slimeft contract", async (accounts) => {
 
 	it("current should be 0", async () => {
 		const instance = await SlimeNFT.deployed();
-		const current = await instance.currentSupply.call();
+		const current = await instance.totalSupply.call();
 		assert.equal(current, 0);
 	});
 
@@ -29,10 +29,13 @@ contract("slimeft contract", async (accounts) => {
 		await instance.setMintEnabled(true, { from: accounts[0] });
 		let success = true;
 		try {
-			await instance.mint.call(accounts[0]);
+			await instance.mint(accounts[0], "king/main.png", {
+				from: accounts[0],
+			});
 		} catch (error) {
 			success = false;
 		}
+		console.log(await instance.tokenURI(0));
 		assert.equal(success, true);
 	});
 
