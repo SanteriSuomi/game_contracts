@@ -1,94 +1,124 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.11;
 
+import "./Owners.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 
-contract SlimeNFT is ERC721URIStorage, ERC721Enumerable, Ownable {
+contract SlimeNFT is ERC721URIStorage, ERC721Enumerable, Owners {
     using Counters for Counters.Counter;
+    using SafeMath for uint;
 
-    uint256 public maximumSupply;
-    Counters.Counter private _tokenIds;
+    struct MintedEvent {
+        address minter;
+        address to;
+        uint amount;
+        uint time;
+    }
+    event Minted(MintedEvent indexed mintedData);
 
-    bool public mintEnabled;
-    bool public burnEnabled;
-    string public baseTokenURI;
+    Counters.Counter private _tokenIdCounter;
+    Counters.Counter private _priceRangeCounter;
 
-    function setMintEnabled(bool value) public onlyOwner {
-        mintEnabled = value;
+    bool public paused;
+    uint public maxMint;
+
+    string private __baseURI;
+    mapping(address => uint) amountMinted;
+
+    struct PriceRange {
+        uint price;
+        uint cap;
+    }
+    PriceRange[] private _priceRanges;
+
+    function getCurrentPrice() external view returns(uint) {
+        return _priceRanges[_priceRangeCounter.current()].price;
     }
 
-    function setBurnEnabled(bool value) public onlyOwner {
-        burnEnabled = value;
+    constructor(string memory baseURI, uint _maxMint, PriceRange[] memory priceRanges) ERC721("Slime", "SLM") {
+        require(bytes(baseURI).length > 0, "Must set base URI");
+        __baseURI = baseURI;
+        maxMint = _maxMint;
+        for(uint i = 0; i < priceRanges.length; i++) {
+            _priceRanges.push(priceRanges[i]);
+        }
     }
 
-    function updateBaseTokenURI(string memory _baseTokenURI) public onlyOwner {
-        baseTokenURI = _baseTokenURI;
+    modifier pauseCheck() {
+        require(!paused || isOwner(msg.sender), "Minting is paused");
+        _;
     }
 
-    function _baseURI() internal view override returns(string memory) {
-        return baseTokenURI;
+    function mint(address to, uint amount, string memory _tokenURI) external payable pauseCheck {
+        require((amountMinted[to] + amount) <= maxMint, "Amount exceeds max mint per wallet");
+        uint currPriceInd = _priceRangeCounter.current();
+		require(currPriceInd.add(1) < _priceRanges.length, "Supply cap reached");
+        PriceRange storage currPrice = _priceRanges[currPriceInd];
+		require((amountMinted[to] + amount) <= currPrice.cap, "Amount exceeds current price range cap");
+        require(msg.value == (amount * currPrice.price.mul(10 ** 18)), "Wrong amount of ether given");
+        uint currTokenID = _tokenIdCounter.current();
+        for(uint i = 0; i < amount; i++) {
+            _safeMint(to, currTokenID);
+            _setTokenURI(currTokenID, _tokenURI);
+            _tokenIdCounter.increment();
+			currTokenID = _tokenIdCounter.current();
+            amountMinted[to] = amountMinted[to].add(1);
+        }
+		if (currTokenID >= currPrice.cap) {
+            _priceRangeCounter.increment();
+        }
+        emit Minted(MintedEvent({
+            minter: msg.sender,
+            to: to,
+            amount: amount,
+            time: block.timestamp
+        }));
     }
 
-    constructor(uint256 _maximumSupply, string memory _baseTokenURI) ERC721("Slime", "SLM") {
-        maximumSupply = _maximumSupply;
-        baseTokenURI = _baseTokenURI;
-        mintEnabled = false;
-        burnEnabled = false;
+    function addPriceRange(PriceRange memory priceRange) external onlyOwners {
+        require(priceRange.cap > 0, "Cap of 0 makes no sense");
+        _priceRanges.push(priceRange);
     }
 
-    function mint(address toAddress, string memory _tokenURI) public {
-        require(_tokenIds.current() < maximumSupply, "supply exceeded");
-        require(mintEnabled == true, "minting has not been enabled");
-        uint256 _newTokenID = _tokenIds.current();
-        _safeMint(toAddress, _newTokenID);
-        _setTokenURI(_newTokenID, _tokenURI);
-        _tokenIds.increment();
+    // Return the current supply, not the capped max capped supply.
+    function totalSupply() public view override returns(uint256) {
+        return _tokenIdCounter.current();
     }
 
-    function burn(uint256 tokenID) public {
-        require(burnEnabled == true, "burn has not been enabled");
-        require(_exists(tokenID), "this tokenID does not exist");
-        _burn(tokenID);
-        _tokenIds.decrement();
+    function setPaused(bool _paused) external onlyOwners {
+        paused = _paused;
     }
 
-    // Below here are overridden functions that have not been modified.
+    function _baseURI() internal view virtual override returns (string memory) {
+        return __baseURI;
+    }
 
-    function _beforeTokenTransfer(address from, address to, uint256 tokenId)
-        internal
-        override(ERC721, ERC721Enumerable)
-    {
+    function setBaseURI(string memory baseURI) external onlyOwners {
+        __baseURI = baseURI;
+    }
+
+    // Below are hooks that must be overridden because two or more parents contain them.
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 tokenId
+    ) internal override (ERC721, ERC721Enumerable) {
         super._beforeTokenTransfer(from, to, tokenId);
     }
 
-    function _burn(uint256 tokenId) internal override(ERC721, ERC721URIStorage) {
+    function _burn(uint256 tokenId) internal override (ERC721, ERC721URIStorage) {
         super._burn(tokenId);
     }
 
-    function tokenURI(uint256 tokenId)
-        public
-        view
-        override(ERC721, ERC721URIStorage)
-        returns (string memory)
-    {
-        return super.tokenURI(tokenId);
-    }
-
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        override(ERC721, ERC721Enumerable)
-        returns (bool)
-    {
+    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC721, ERC721Enumerable) returns (bool) {
         return super.supportsInterface(interfaceId);
     }
 
-    function safeMint(address to, uint256 tokenId) public onlyOwner {
-        _safeMint(to, tokenId);
+    function tokenURI(uint256 tokenId) public view virtual override(ERC721, ERC721URIStorage) returns (string memory) {
+        return super.tokenURI(tokenId);
     }
 }
