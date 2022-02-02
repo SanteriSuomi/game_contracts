@@ -6,8 +6,8 @@ module.exports = function (deployer, network, accounts) {
 		"KEK",
 		10,
 		[
-			[1, 5],
-			[2, 5],
+			[1, 0, 5],
+			[1, 0, 5],
 		],
 		{ from: accounts[0] }
 	);

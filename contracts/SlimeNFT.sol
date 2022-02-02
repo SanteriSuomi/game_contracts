@@ -31,6 +31,7 @@ contract SlimeNFT is ERC721URIStorage, ERC721Enumerable, Owners {
 
     struct PriceRange {
         uint price;
+		uint minted;
         uint cap;
     }
     PriceRange[] private _priceRanges;
@@ -54,23 +55,29 @@ contract SlimeNFT is ERC721URIStorage, ERC721Enumerable, Owners {
     }
 
     function mint(address to, uint amount, string memory _tokenURI) external payable pauseCheck {
-        require((amountMinted[to] + amount) <= maxMint, "Amount exceeds max mint per wallet");
-        uint currPriceInd = _priceRangeCounter.current();
-		require(currPriceInd.add(1) < _priceRanges.length, "Supply cap reached");
-        PriceRange storage currPrice = _priceRanges[currPriceInd];
-		require((amountMinted[to] + amount) <= currPrice.cap, "Amount exceeds current price range cap");
-        require(msg.value == (amount * currPrice.price.mul(10 ** 18)), "Wrong amount of ether given");
-        uint currTokenID = _tokenIdCounter.current();
-        for(uint i = 0; i < amount; i++) {
-            _safeMint(to, currTokenID);
-            _setTokenURI(currTokenID, _tokenURI);
-            _tokenIdCounter.increment();
+		uint mintAmount = amountMinted[to] + amount;
+		require(mintAmount <= maxMint, "Max mint amount reached");
+
+		uint currPriceRange = _priceRangeCounter.current();
+		require(currPriceRange < _priceRanges.length, "Supply cap reached");
+
+		PriceRange storage priceRange = _priceRanges[currPriceRange];
+		require(mintAmount <= priceRange.cap, "Amount exceeds current price range max");
+
+		require(msg.value == (amount * priceRange.price * 10**18), "Ether sent is not correct");
+
+		uint currTokenID = _tokenIdCounter.current();
+		for(uint i = 0; i < amount; i++) {
+			_safeMint(to, currTokenID);
+			_setTokenURI(currTokenID, _tokenURI);
+			_tokenIdCounter.increment();
 			currTokenID = _tokenIdCounter.current();
-            amountMinted[to] = amountMinted[to].add(1);
-        }
-		if (currTokenID >= currPrice.cap) {
-            _priceRangeCounter.increment();
-        }
+			priceRange.minted = priceRange.minted.add(1);
+			amountMinted[to] = amountMinted[to].add(1);
+		}
+		if (priceRange.minted >= priceRange.cap) {
+			_priceRangeCounter.increment();
+		}
         emit Minted(MintedEvent({
             minter: msg.sender,
             to: to,

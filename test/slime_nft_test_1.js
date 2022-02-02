@@ -22,7 +22,7 @@ contract("slimenft contract test 1", async (accounts) => {
 				value: web3.utils.toWei("11", "ether"),
 			});
 		} catch (error) {
-			if (error.reason == "Amount exceeds max mint per wallet") {
+			if (error.reason == "Max mint amount reached") {
 				correctAssert = true;
 			}
 		}

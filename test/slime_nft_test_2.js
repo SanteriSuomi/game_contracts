@@ -13,15 +13,16 @@ contract("slimenft contract test 2", async (accounts) => {
 
 	it("wrong amount of ether given", async () => {
 		const instance = await SlimeNFT.deployed();
-		let correctAssert = true;
+		let correctAssert = false;
 		try {
-			await instance.mint.sendTransaction(accounts[0], "5", "KEK", {
-				from: accounts[0],
+			await instance.mint.sendTransaction(accounts[1], "5", "KEK", {
+				from: accounts[1],
 				value: web3.utils.toWei("4", "ether"),
 			});
 		} catch (error) {
-			if (error.reason == "Wrong amount of ether given") {
-				correctAssert = false;
+			console.log(error.reason);
+			if (error.reason == "Ether sent is not correct") {
+				correctAssert = true;
 			}
 		}
 		assert.equal(correctAssert, true);
@@ -29,9 +30,9 @@ contract("slimenft contract test 2", async (accounts) => {
 
 	it("can't mint while paused", async () => {
 		const instance = await SlimeNFT.deployed();
-		let correctAssert = true;
+		let correctAssert = false;
 		try {
-			await instance.setPaused.sendTransaction(false, {
+			await instance.setPaused.sendTransaction(true, {
 				from: accounts[0],
 			});
 			await instance.mint.sendTransaction(accounts[1], "1", "KEK", {
@@ -40,7 +41,7 @@ contract("slimenft contract test 2", async (accounts) => {
 			});
 		} catch (error) {
 			if (error.reason == "Minting is paused") {
-				correctAssert = false;
+				correctAssert = true;
 			}
 		}
 		assert.equal(correctAssert, true);
@@ -51,9 +52,11 @@ contract("slimenft contract test 2", async (accounts) => {
 		await instance.setPaused.sendTransaction(true, {
 			from: accounts[0],
 		});
-		console.log((await instance.totalSupply.call()).toNumber());
-		await instance.mint.sendTransaction(accounts[0], "1", "KEK", {
+		await instance.addOwner.sendTransaction(accounts[1], {
 			from: accounts[0],
+		});
+		await instance.mint.sendTransaction(accounts[1], "1", "KEK", {
+			from: accounts[1],
 			value: web3.utils.toWei("1", "ether"),
 		});
 		const totalSupply = await instance.totalSupply.call();
