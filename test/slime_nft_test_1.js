@@ -9,8 +9,8 @@ contract("slimenft contract test 1", async (accounts) => {
 
 	it("currentprice valid after instantiation", async () => {
 		const instance = await SlimeNFT.deployed();
-		const currentPrice = await instance.getCurrentPrice.call();
-		assert.equal(currentPrice, 1);
+		const currentPrice = await instance.getCurrentPriceRange.call();
+		assert.equal(currentPrice[0], 1);
 	});
 
 	it("exceeds max mint amount", async () => {

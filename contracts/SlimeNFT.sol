@@ -36,8 +36,13 @@ contract SlimeNFT is ERC721URIStorage, ERC721Enumerable, Owners {
     }
     PriceRange[] private _priceRanges;
 
-    function getCurrentPrice() external view returns(uint) {
-        return _priceRanges[_priceRangeCounter.current()].price;
+    function getCurrentPriceRange() external view returns(uint, uint, uint) {
+		uint currPriceRange = _priceRangeCounter.current();
+		if (currPriceRange >= _priceRanges.length) {
+			currPriceRange = currPriceRange.sub(1);
+		}
+		PriceRange storage priceRange = _priceRanges[currPriceRange];
+        return (priceRange.price, priceRange.minted, priceRange.cap);
     }
 
     constructor(string memory baseURI, uint _maxMint, PriceRange[] memory priceRanges) ERC721("Slime", "SLM") {
@@ -78,6 +83,7 @@ contract SlimeNFT is ERC721URIStorage, ERC721Enumerable, Owners {
 		if (priceRange.minted >= priceRange.cap) {
 			_priceRangeCounter.increment();
 		}
+
         emit Minted(MintedEvent({
             minter: msg.sender,
             to: to,
