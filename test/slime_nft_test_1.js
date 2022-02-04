@@ -17,7 +17,7 @@ contract("slimenft contract test 1", async (accounts) => {
 		const instance = await SlimeNFT.deployed();
 		let correctAssert = false;
 		try {
-			await instance.mint.sendTransaction(accounts[0], "11", "KEK", {
+			await instance.mint.sendTransaction(accounts[0], "11", "KEK", [], {
 				from: accounts[0],
 				value: web3.utils.toWei("11", "ether"),
 			});
@@ -33,15 +33,15 @@ contract("slimenft contract test 1", async (accounts) => {
 		const instance = await SlimeNFT.deployed();
 		let correctAssert = false;
 		try {
-			await instance.mint.sendTransaction(accounts[0], "5", "KEK", {
+			await instance.mint.sendTransaction(accounts[0], "5", "KEK", [], {
 				from: accounts[0],
 				value: web3.utils.toWei("5", "ether"),
 			});
-			await instance.mint.sendTransaction(accounts[1], "5", "KEK", {
+			await instance.mint.sendTransaction(accounts[1], "5", "KEK", [], {
 				from: accounts[1],
 				value: web3.utils.toWei("5", "ether"),
 			});
-			await instance.mint.sendTransaction(accounts[2], "5", "KEK", {
+			await instance.mint.sendTransaction(accounts[2], "5", "KEK", [], {
 				from: accounts[2],
 				value: web3.utils.toWei("5", "ether"),
 			});

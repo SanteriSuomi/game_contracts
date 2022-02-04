@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
 contract SlimeNFT is ERC721URIStorage, ERC721Enumerable, Owners {
 	using Counters for Counters.Counter;
@@ -28,6 +29,9 @@ contract SlimeNFT is ERC721URIStorage, ERC721Enumerable, Owners {
 
 	string private __baseURI;
 	mapping(address => uint256) amountMinted;
+
+	bytes32 private merkleRoot;
+	bool public whitelistEnabled;
 
 	struct PriceRange {
 		uint256 price;
@@ -74,8 +78,17 @@ contract SlimeNFT is ERC721URIStorage, ERC721Enumerable, Owners {
 	function mint(
 		address to,
 		uint256 amount,
-		string memory _tokenURI
+		string memory _tokenURI,
+		bytes32[] calldata merkleProof
 	) external payable pauseCheck {
+		if (whitelistEnabled) {
+			bytes32 merkleLeaf = keccak256(abi.encodePacked(to));
+			require(
+				MerkleProof.verify(merkleProof, merkleRoot, merkleLeaf),
+				"This address is not whitelisted"
+			);
+		}
+
 		uint256 mintAmount = amountMinted[to] + amount;
 		require(mintAmount <= maxMint, "Max mint amount reached");
 
@@ -136,6 +149,18 @@ contract SlimeNFT is ERC721URIStorage, ERC721Enumerable, Owners {
 
 	function setBaseURI(string memory baseURI) external onlyOwners {
 		__baseURI = baseURI;
+	}
+
+	function setMaxMint(uint256 _maxMint) external onlyOwners {
+		maxMint = _maxMint;
+	}
+
+	function setMerkleRoot(bytes32 _merkleRoot) external onlyOwners {
+		merkleRoot = _merkleRoot;
+	}
+
+	function setWhitelistEnabled(bool enabled) external onlyOwners {
+		whitelistEnabled = enabled;
 	}
 
 	// Below are hooks that must be overridden because two or more parents contain them.
