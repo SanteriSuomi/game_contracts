@@ -8,10 +8,13 @@ import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 
 contract SlimeNFT is ERC721URIStorage, ERC721Enumerable, Owners {
 	using Counters for Counters.Counter;
 	using SafeMath for uint256;
+	using Strings for uint256;
 
 	struct MintedEvent {
 		address minter;
@@ -20,9 +23,17 @@ contract SlimeNFT is ERC721URIStorage, ERC721Enumerable, Owners {
 		uint256 time;
 	}
 	event Minted(MintedEvent indexed mintedData);
+	event Compounded(
+		address indexed compounder,
+		uint256 indexed tokenID,
+		uint256 indexed amount
+	);
 
 	Counters.Counter private _tokenIdCounter;
 	Counters.Counter private _priceRangeCounter;
+
+	address private _tokenAddress;
+	IERC20 private _token;
 
 	bool public paused;
 	uint256 public maxMint;
@@ -30,8 +41,8 @@ contract SlimeNFT is ERC721URIStorage, ERC721Enumerable, Owners {
 	string private __baseURI;
 	mapping(address => uint256) amountMinted;
 
-	bytes32 private merkleRoot;
 	bool public whitelistEnabled;
+	bytes32 private merkleRoot;
 
 	struct PriceRange {
 		uint256 price;
@@ -57,6 +68,15 @@ contract SlimeNFT is ERC721URIStorage, ERC721Enumerable, Owners {
 		return (priceRange.price, priceRange.minted, priceRange.cap);
 	}
 
+	uint256 private _maxLevel = 10;
+	uint256 private _tokensPerLevel = 50;
+	struct SlimeInfo {
+		uint256 amountCompounded;
+		uint256 level;
+		uint256 time;
+	}
+	mapping(uint256 => SlimeInfo) public slimeInfo;
+
 	constructor(
 		string memory baseURI,
 		uint256 _maxMint,
@@ -68,6 +88,7 @@ contract SlimeNFT is ERC721URIStorage, ERC721Enumerable, Owners {
 		for (uint256 i = 0; i < priceRanges.length; i++) {
 			_priceRanges.push(priceRanges[i]);
 		}
+		_tokenIdCounter.increment();
 	}
 
 	modifier pauseCheck() {
@@ -112,6 +133,11 @@ contract SlimeNFT is ERC721URIStorage, ERC721Enumerable, Owners {
 			_setTokenURI(currTokenID, _tokenURI);
 			_tokenIdCounter.increment();
 			currTokenID = _tokenIdCounter.current();
+			slimeInfo[currTokenID] = SlimeInfo({
+				amountCompounded: 0,
+				level: 1,
+				time: block.timestamp
+			});
 			priceRange.minted = priceRange.minted.add(1);
 			amountMinted[to] = amountMinted[to].add(1);
 		}
@@ -129,6 +155,54 @@ contract SlimeNFT is ERC721URIStorage, ERC721Enumerable, Owners {
 		);
 	}
 
+	function compound(uint256 amount, uint256 tokenID) public {
+		require(
+			amount <= _token.balanceOf(msg.sender),
+			"Token balance not high enough to compound"
+		);
+		require(
+			amount <= _token.allowance(msg.sender, address(this)),
+			"Increase contract spend allowance"
+		);
+		require(
+			_exists(tokenID) && msg.sender == ownerOf(tokenID),
+			"This NFT does not exist or you do not own it"
+		);
+		SlimeInfo storage info = slimeInfo[tokenID];
+		require(info.level < _maxLevel, "This NFT is already max level");
+		info.amountCompounded = info.amountCompounded.add(amount);
+		info.level = info.amountCompounded.div(_tokensPerLevel);
+		info.time = block.timestamp;
+		uint256 excess = 0;
+		if (info.level >= _maxLevel) {
+			excess = info.amountCompounded - (_maxLevel * _tokensPerLevel);
+			info.level = _maxLevel;
+			info.amountCompounded = info.amountCompounded.sub(excess);
+		}
+		_setTokenURI(
+			tokenID,
+			string(
+				abi.encodePacked(
+					"level=",
+					info.level.toString(),
+					"&locked=",
+					info.amountCompounded.toString()
+				)
+			)
+		);
+		_token.transferFrom(msg.sender, address(this), amount.sub(excess));
+		emit Compounded(msg.sender, tokenID, amount);
+	}
+
+	function setMaxLevel(uint256 maxLevel) external onlyOwners {
+		_maxLevel = maxLevel;
+	}
+
+	function setToken(address tokenAddress) external onlyOwners {
+		_tokenAddress = tokenAddress;
+		_token = IERC20(tokenAddress);
+	}
+
 	function addPriceRange(PriceRange memory priceRange) external onlyOwners {
 		require(priceRange.cap > 0, "Cap of 0 makes no sense");
 		_priceRanges.push(priceRange);
@@ -136,7 +210,7 @@ contract SlimeNFT is ERC721URIStorage, ERC721Enumerable, Owners {
 
 	// Return the current supply, not the capped max capped supply.
 	function totalSupply() public view override returns (uint256) {
-		return _tokenIdCounter.current();
+		return _tokenIdCounter.current().sub(1);
 	}
 
 	function setPaused(bool _paused) external onlyOwners {

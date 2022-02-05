@@ -20,7 +20,6 @@ contract("slimenft contract test 2", async (accounts) => {
 				value: web3.utils.toWei("4", "ether"),
 			});
 		} catch (error) {
-			console.log(error.reason);
 			if (error.reason == "Ether sent is not correct") {
 				correctAssert = true;
 			}
