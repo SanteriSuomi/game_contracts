@@ -18,15 +18,16 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 	event Compounded(address compounder, uint256 amount, uint256 date);
 	event Claimed(address claimer, uint256 amount, uint256 date);
 
-	uint256 public addressMax = 5;
-	uint256 public supplyMax = 1000;
+	uint256 public addressMax = 5; // Max NFTs per address
+	uint256 public supplyMax = 1000; // Max total supply cap
 	uint256 public mintPrice = 1000; // Mint price of one NFT in tokens
-	uint256 public maxTokenLevel = 10;
-	uint256 public tokensPerLevel = 1000;
-	uint256 public rewardDivisor = 10;
-	mapping(uint256 => NFTData) public nftData;
+	uint256 public maxTokenLevel = 10; // Amount of levels an individual NFT can be upgraded
+	uint256 public tokensPerLevel = 1000; // Amount of tokens needed to upgrade an NFT (one level)
+	uint256 public baseRewardDivisor = 10; // Helper to reduce/increase rewards
+	uint256 public levelRewardDivisor = 2; // Another helper to chance the impact of token level on reward generation
+	mapping(uint256 => NFTData) public nftData; // Store NFT Data for invidividual token
 
-	Token private token;
+	Token private token; // ERC20 token
 	string private nftBaseURI =
 		"https://slimekeeper-web-dev.herokuapp.com/api/nft/data?";
 	mapping(address => uint256) private amountMinted;
@@ -35,9 +36,9 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 	// Represents in-game properties
 	struct NFTData {
 		uint256 level; // Current level of NFT
-		uint256 birth; // Date this NFT was minted
-		uint256 locked; // Tokens currently locked in this NFT
-		uint256 claimed; // Date last rewards were last claimed, if not claimed once, same as birth
+		uint256 birthDate; // Date this NFT was minted
+		uint256 lockedAmount; // Amount of tokens currently locked in this NFT
+		uint256 lastClaimedDate; // Date last rewards were last claimed, if not claimed once, same as birth
 
 		// Other in-game properties here and API configured to show them
 	}
@@ -60,22 +61,22 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 			token.allowance(to, address(this)) >= totalMintPrice,
 			"Not enough allowance"
 		);
-		uint256 birth = block.timestamp;
+		uint256 birthDate = block.timestamp;
 		for (uint256 i = 0; i < amount; i++) {
 			uint256 currTokenId = tokenIds.current();
 			_safeMint(to, currTokenId);
-			updateTokenUri(currTokenId, birth, 1, 0);
+			updateTokenUri(currTokenId, birthDate, 1, 0);
 			nftData[currTokenId] = NFTData({
 				level: 1,
-				birth: birth,
-				locked: 0,
-				claimed: birth
+				birthDate: birthDate,
+				lockedAmount: 0,
+				lastClaimedDate: birthDate
 			});
 			tokenIds.increment();
 		}
 		amountMinted[to] += amount;
 		token.transferFrom(to, address(this), totalMintPrice);
-		emit Minted(to, amount, birth);
+		emit Minted(to, amount, birthDate);
 	}
 
 	function compound(uint256 tokenId, uint256 amount) public checkPaused {
@@ -91,24 +92,25 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		claim(tokenId); // Claim before compounding
 		NFTData storage data = nftData[tokenId];
 		require(data.level < maxTokenLevel, "This NFT is already max level");
-		uint256 tokensPerLevelDec = tokensPerLevel * (10**18);
-		uint256 newLocked = data.locked + tokenAmount;
-		uint256 newLevel = newLocked / tokensPerLevelDec;
+		uint256 tokensPerLevelTotal = tokensPerLevel * (10**18);
+		uint256 newLocked = data.lockedAmount + tokenAmount;
+		uint256 newLevel = newLocked / tokensPerLevelTotal;
 		uint256 excessAmount = 0;
 		if (newLevel >= maxTokenLevel) {
-			excessAmount = newLocked - (maxTokenLevel * tokensPerLevelDec);
+			excessAmount = newLocked - (maxTokenLevel * tokensPerLevelTotal);
 			data.level = maxTokenLevel;
-			data.locked = newLocked - excessAmount;
+			data.lockedAmount = newLocked - excessAmount;
 		} else {
-			data.locked = newLocked;
+			data.lockedAmount = newLocked;
 			data.level = newLevel;
 		}
-		updateTokenUri(tokenId, data.level, data.birth, data.locked);
+		updateTokenUri(tokenId, data.level, data.birthDate, data.lockedAmount);
 		token.transferFrom(
 			msg.sender,
 			address(this),
 			tokenAmount - excessAmount
 		);
+		emit Compounded(msg.sender, tokenAmount, block.timestamp);
 	}
 
 	function claim(uint256 tokenId) public checkPaused {
@@ -118,18 +120,26 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 			"Sender does not own this token"
 		);
 		NFTData storage data = nftData[tokenId];
-		uint256 rewardAmount = (((block.timestamp - data.claimed) /
-			rewardDivisor) * data.level) * (10**18);
-		data.claimed = block.timestamp;
+		uint256 rewardAmount = reward(tokenId);
+		data.lastClaimedDate = block.timestamp;
 		require(
 			token.balanceOf(address(this)) >= rewardAmount,
 			"Not enough balance to withdraw"
 		);
 		token.transferFrom(address(this), msg.sender, rewardAmount);
+		emit Claimed(msg.sender, rewardAmount, block.timestamp);
+	}
+
+	function reward(uint256 tokenId) public view returns (uint256) {
+		require(_exists(tokenId), "This token ID does not exist");
+		NFTData storage data = nftData[tokenId];
+		return
+			(((block.timestamp - data.lastClaimedDate) / baseRewardDivisor) *
+				(data.level / levelRewardDivisor)) * (10**18);
 	}
 
 	function getNFTData(uint256 tokenId)
-		public
+		external
 		view
 		returns (
 			uint256,
@@ -140,7 +150,12 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 	{
 		require(_exists(tokenId), "This token ID does not exist");
 		NFTData storage data = nftData[tokenId];
-		return (data.level, data.birth, data.locked, data.claimed);
+		return (
+			data.level,
+			data.birthDate,
+			data.lockedAmount,
+			data.lastClaimedDate
+		);
 	}
 
 	function setAddressMax(uint256 newMax) external onlyOwners {
@@ -151,20 +166,23 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		supplyMax = newMax;
 	}
 
-	function setMaxTokenLevel(uint256 newLevel) external onlyOwners {
-		mintPrice = newLevel;
-	}
-
 	function setMintPrice(uint256 newPrice) external onlyOwners {
 		mintPrice = newPrice;
+	}
+
+	function setMaxTokenLevel(uint256 newLevel) external onlyOwners {
+		mintPrice = newLevel;
 	}
 
 	function setTokensPerLevel(uint256 newTokensPerLevel) external onlyOwners {
 		tokensPerLevel = newTokensPerLevel;
 	}
 
-	function setRewardDivisor(uint256 newRewardDivisor) external onlyOwners {
-		rewardDivisor = newRewardDivisor;
+	function setbaseRewardDivisor(uint256 newbaseRewardDivisor)
+		external
+		onlyOwners
+	{
+		baseRewardDivisor = newbaseRewardDivisor;
 	}
 
 	function setTokenAddress(address newTokenAddress) external onlyOwners {
@@ -186,8 +204,8 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 	function updateTokenUri(
 		uint256 tokenId,
 		uint256 level,
-		uint256 birth,
-		uint256 locked
+		uint256 birthDate,
+		uint256 lockedAmount
 	) private {
 		_setTokenURI(
 			tokenId,
@@ -195,10 +213,10 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 				abi.encodePacked(
 					"level=",
 					level.toString(),
-					"&birth=",
-					birth.toString(),
-					"&locked=",
-					locked.toString()
+					"&birthDate=",
+					birthDate.toString(),
+					"&lockedAmount=",
+					lockedAmount.toString()
 				)
 			)
 		);
