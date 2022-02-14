@@ -9,7 +9,16 @@ import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 import "@uniswap/v2-periphery/contracts/libraries/UniswapV2Library.sol";
 
 contract Token is ERC20, PauseOwners {
-	uint256 public immutable MAX_FEE = 25;
+	uint256 public immutable MAX_TOTAL_FEE = 25; // We can never surpass this total fee
+
+	uint256 public antiBotEnabled = false;
+	uint256 private antiBotRanOnce = false; // We can only run antibot once, when initial liquidity is added
+	uint256 private antiBotTaxesTimeInSeconds = 3600;
+	uint256 private antiBotTaxesEndTime;
+	uint256 private antiBotBlockTime = 2;
+	uint256 private antiBotBlockEnd;
+
+	uint256 public liquidityTaxEnabled = true;
 
 	uint256 public sellDevelopmentTax = 4;
 	uint256 public sellMarketingTax = 4;
@@ -38,8 +47,17 @@ contract Token is ERC20, PauseOwners {
 
 	receive() external payable {} // Must be defined so the contract is able to receive ETH from swaps
 
-	function addLiquidity(uint256 amountToken) public payable onlyOwners {
+	function addLiquidityAntiBot(uint256 amountToken)
+		public
+		payable
+		onlyOwners
+	{
+		// Add initial liquidity and enabled the "anti-bot" feature
 		require(address(router) != address(0), "Router not set yet");
+		require(
+			balanceOf(msg.sender) >= amountToken,
+			"Sender does not have enough token balance"
+		);
 		router.addLiquidityETH{ value: msg.value }(
 			address(this),
 			amountToken,
@@ -48,20 +66,28 @@ contract Token is ERC20, PauseOwners {
 			developmentAddress,
 			block.timestamp
 		);
+		if (!antiBotRanOnce) {
+			antiBotEnabled = true;
+			antiBotRanOnce = true;
+			antiBotTaxesEndTime = block.timestamp + antiBotTaxesTimeInSeconds;
+			antiBotBlockEnd = block.number + antiBotBlockTime;
+		}
 	}
 
 	function _transfer(
 		address sender,
 		address recipient,
 		uint256 amount
-	) internal virtual override {
+	) internal virtual override checkPaused {
 		address routerAddress = address(router);
+
 		bool takeFee = true;
 		bool anyTaxAddressNotSet = developmentAddress == address(0) ||
 			marketingAddress == address(0) ||
 			liquidityAddress == address(0);
 		bool isWalletToWalletTransfer = !(sender == routerAddress &&
 			recipient == routerAddress);
+
 		if (
 			isExcludedFromTax[sender] ||
 			anyTaxAddressNotSet ||
@@ -70,95 +96,105 @@ contract Token is ERC20, PauseOwners {
 			takeFee = false;
 		}
 
+		uint256 totalFeeInTokens = 0;
 		if (takeFee) {
-			uint256 totalFee = 0;
 			if (recipient == routerAddress) {
 				// Selling
-				totalFee =
-					sellDevelopmentTax +
-					sellMarketingTax +
-					sellLiquidityTax;
-				takeFees(
+				totalFeeInTokens = takeFees(
 					amount,
-					totalFee,
 					sellDevelopmentTax,
 					sellMarketingTax,
 					sellLiquidityTax
 				);
 			} else {
 				// Buying
-				totalFee =
-					buyDevelopmentTax +
-					buyMarketingTax +
-					buyLiquidityTax;
-				takeFees(
+				totalFeeInTokens = takeFees(
 					amount,
-					totalFee,
 					buyDevelopmentTax,
 					buyMarketingTax,
 					buyLiquidityTax
 				);
 			}
 		}
-		super._transfer(sender, recipient, amount - finalFee);
+		super._transfer(sender, recipient, amount - totalFeeInTokens);
 	}
 
 	function takeFees(
 		uint256 amountToken,
-		uint256 totalFee,
 		uint256 developmentFee,
 		uint256 marketingFee,
 		uint256 liquidityFee
 	) private returns (uint256) {
-		uint256 walletFeeInTokens = (tokenAmount *
+		if (antiBotEnabled) {
+			developmentFee *= 2;
+			marketingFee *= 2;
+			liquidityFee *= 2;
+		}
+
+		uint256 totalFee = developmentFee + marketingFee + liquidityFee;
+
+		uint256 walletFeeInTokens = (amountToken *
 			(developmentFee + marketingFee)) / 100;
-		uint256 balance = swapTokensToETH(walletFeeInTokens);
+		swapAndTransferFees(
+			walletFeeInTokens,
+			totalFee,
+			developmentFee,
+			marketingFee
+		);
+
+		uint256 liquidityFeeInTokens = 0;
+		if (liquidityTaxEnabled) {
+			liquidityFeeInTokens = (amountToken * liquidityFee) / 100;
+			swapAndLiquify(liquidityFeeInTokens);
+		}
+
+		return walletFeeInTokens + liquidityFeeInTokens;
+	}
+
+	function swapAndTransferFees(
+		uint256 amountToken,
+		uint256 totalFee,
+		uint256 developmentFee,
+		uint256 marketingFee
+	) private {
+		uint256 balance = swapTokensToETH(amountToken);
 		if (balance > 0) {
 			(bool devSent, ) = developmentAddress.call{
-				value: getEthAmountFromFee(balance, developmentFee, walletFee)
+				value: getEthFromBalanceWithFees(
+					balance,
+					totalFee,
+					developmentFee + marketingFee
+				)
 			}("");
 			(bool marSent, ) = marketingAddress.call{
-				value: getEthAmountFromFee(balance, marketingFee, walletFee)
+				value: getEthFromBalanceWithFees(
+					balance,
+					totalFee,
+					marketingFee
+				)
 			}("");
 			require(
 				devSent && marSent,
 				"Couldn't send to either development or marketing address"
 			);
 		}
-		uint256 liquidityFeeInTokens = (tokenAmount * liquidityFee) / 100;
-		uint256 tokenPrice = getTokenPrice(liquidityFeeInTokens);
-		return feeInTokens;
 	}
 
-	function addTaxLiquidity(uint256 amountToken, uint256 amountEth) private {
-		_approve(address(this), address(router), amountToken);
-		router.addLiquidityETH{ value: amountEth }(
-			address(this),
-			amountToken,
-			0,
-			0,
-			developmentAddress,
-			block.timestamp
-		);
+	function getEthFromBalanceWithFees(
+		uint256 balance,
+		uint256 withFee,
+		uint256 totalFees
+	) private pure returns (uint256) {
+		return (balance * withFee * totalFees) / 100;
 	}
 
-	function getTokenPrice(uint256 amountToken) private {
-		address factoryAddress = router.factory();
-		address pairAddress = UniswapV2Library.pairFor(
-			factoryAddress,
-			address(this),
-			router.WETH()
-		);
-		require(
-			pairAddress != address(0),
-			"Can't add tax liquidity yet, initial liquidity has not been provided"
-		);
-		(uint256 res0, uint256 res1) = UniswapV2Library.getReserves(
-			factoryAddress,
-			address(this),
-			router.WETH()
-		);
-		return UniswapV2Library.quote(amountToken, res0, res1);
+	function swapAndLiquify(uint256 amountToken) private {
+		uint256 half1 = amountToken / 2;
+		uint256 half2 = amountToken - half1;
+		uint256 balanceBeforeSwap = address(this).balance;
+		swapTokensToETH(half1); // Swap half of the tokens to BNB
+		uint256 balanceAfterSwap = address(this).balance - balanceBeforeSwap;
+		addTaxLiquidity(half2, balanceAfterSwap); // Add the non-swapped tokens and the swapped BNB to liquidity
 	}
 
 	function swapTokensToETH(uint256 amountTokens) private returns (uint256) {
@@ -176,12 +212,16 @@ contract Token is ERC20, PauseOwners {
 		return address(this).balance; // Balance in wei after taking fees
 	}
 
-	function getEthAmountFromFee(
-		uint256 weiBalance,
-		uint256 fee,
-		uint256 totalFee
-	) private pure returns (uint256) {
-		return (weiBalance * totalFee * fee) / 100;
+	function addTaxLiquidity(uint256 amountToken, uint256 amountEth) private {
+		_approve(address(this), address(router), amountToken);
+		router.addLiquidityETH{ value: amountEth }(
+			address(this),
+			amountToken,
+			0,
+			0,
+			developmentAddress,
+			block.timestamp
+		);
 	}
 
 	function setSellTaxes(
@@ -191,7 +231,7 @@ contract Token is ERC20, PauseOwners {
 	) external onlyOwners {
 		require(
 			(sellDevelopmentTax_ + sellMarketingTax_ + sellLiquidityTax_) <=
-				MAX_FEE,
+				MAX_TOTAL_FEE,
 			"Total taxes are above the allowed amount"
 		);
 		sellDevelopmentTax = sellDevelopmentTax_;
@@ -206,7 +246,7 @@ contract Token is ERC20, PauseOwners {
 	) external onlyOwners {
 		require(
 			(buyDevelopmentTax_ + buyMarketingTax_ + buyLiquidityTax_) <=
-				MAX_FEE,
+				MAX_TOTAL_FEE,
 			"Total taxes are above the allowed amount"
 		);
 		buyDevelopmentTax = buyDevelopmentTax_;
@@ -228,6 +268,10 @@ contract Token is ERC20, PauseOwners {
 		developmentAddress = payable(developmentAddress_);
 		marketingAddress = payable(marketingAddress_);
 		liquidityAddress = payable(liquidityAddress_);
+	}
+
+	function setLiquidityTaxEnabled(bool enabled) external onlyOwners {
+		liquidityTaxEnabled = enabled;
 	}
 
 	function addTaxExcludedAddress(address address_) external onlyOwners {
