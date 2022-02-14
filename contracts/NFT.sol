@@ -186,7 +186,7 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 	}
 
 	function setTokenAddress(address newTokenAddress) external onlyOwners {
-		token = Token(newTokenAddress);
+		token = Token(payable(newTokenAddress));
 	}
 
 	function setBaseUri(string memory newBaseURI) external onlyOwners {

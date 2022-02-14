@@ -15,6 +15,6 @@ contract Game is PauseOwners {
 	}
 
 	function setTokenAddress(address newTokenAddress) external onlyOwners {
-		token = Token(newTokenAddress);
+		token = Token(payable(newTokenAddress));
 	}
 }
