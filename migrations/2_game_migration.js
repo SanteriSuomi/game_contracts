@@ -11,7 +11,8 @@ module.exports = async function (deployer, network, accounts) {
 	await deployer.deploy(NFT, { from: accounts[0] });
 	const nftContract = await NFT.deployed();
 
-	// Deploy ERC20 token contract and feed it game and NFT contracts (to mint tokens for them)
+	// Deploy ERC20 token contract and feed it game and NFT contracts (to mint tokens for them).
+	// Deployer wallet is to be used as development wallet
 	await deployer.deploy(Token, gameContract.address, nftContract.address, {
 		from: accounts[0],
 	});
@@ -29,8 +30,4 @@ module.exports = async function (deployer, network, accounts) {
 	await nftContract.setTokenAddress.sendTransaction(tokenContract.address, {
 		from: accounts[0],
 	});
-
-	console.log(
-		(await tokenContract.balanceOf.call(gameContract.address)).toString()
-	);
 };

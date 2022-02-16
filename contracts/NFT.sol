@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.11;
+pragma solidity >=0.4.22 <0.9.0;
 
 import "./PauseOwners.sol";
 import "./Token.sol";
@@ -20,11 +20,11 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 
 	uint256 public addressMax = 5; // Max NFTs per address
 	uint256 public supplyMax = 1000; // Max total supply cap
-	uint256 public mintPrice = 1000; // Mint price of one NFT in tokens
+	uint256 public mintPrice = 100; // Mint price of one NFT in tokens
 	uint256 public maxTokenLevel = 10; // Amount of levels an individual NFT can be upgraded
 	uint256 public tokensPerLevel = 1000; // Amount of tokens needed to upgrade an NFT (one level)
 	uint256 public baseRewardDivisor = 10; // Helper to reduce/increase rewards
-	uint256 public levelRewardDivisor = 2; // Another helper to chance the impact of token level on reward generation
+	uint256 public levelRewardDivisor = 2; // Another helper to change the impact of token level on reward generation
 	mapping(uint256 => NFTData) public nftData; // Store NFT Data for invidividual token
 
 	Token private token; // ERC20 token
@@ -55,10 +55,13 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 			amountMinted[to] + amount <= supplyMax,
 			"This mint would exceed supply cap"
 		);
-		uint256 totalMintPrice = (amount * mintPrice) * (10**18);
-		require(token.balanceOf(to) >= totalMintPrice, "Token balance too low");
+		uint256 totalMintPrice = amount * mintPrice * 10**token.decimals();
 		require(
-			token.allowance(to, address(this)) >= totalMintPrice,
+			token.balanceOf(msg.sender) >= totalMintPrice,
+			"Token balance too low"
+		);
+		require(
+			token.allowance(msg.sender, address(this)) >= totalMintPrice,
 			"Not enough allowance"
 		);
 		uint256 birthDate = block.timestamp;
@@ -75,12 +78,12 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 			tokenIds.increment();
 		}
 		amountMinted[to] += amount;
-		token.transferFrom(to, address(this), totalMintPrice);
+		token.transferFrom(msg.sender, address(this), totalMintPrice);
 		emit Minted(to, amount, birthDate);
 	}
 
 	function compound(uint256 tokenId, uint256 amount) public checkPaused {
-		uint256 tokenAmount = amount * (10**18);
+		uint256 tokenAmount = amount * 10**token.decimals();
 		require(
 			token.balanceOf(msg.sender) >= tokenAmount,
 			"Token balance too low"
@@ -92,7 +95,7 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		claim(tokenId); // Claim before compounding
 		NFTData storage data = nftData[tokenId];
 		require(data.level < maxTokenLevel, "This NFT is already max level");
-		uint256 tokensPerLevelTotal = tokensPerLevel * (10**18);
+		uint256 tokensPerLevelTotal = tokensPerLevel * 10**token.decimals();
 		uint256 newLocked = data.lockedAmount + tokenAmount;
 		uint256 newLevel = newLocked / tokensPerLevelTotal;
 		uint256 excessAmount = 0;
@@ -135,7 +138,7 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		NFTData storage data = nftData[tokenId];
 		return
 			(((block.timestamp - data.lastClaimedDate) / baseRewardDivisor) *
-				(data.level / levelRewardDivisor)) * (10**18);
+				(data.level / levelRewardDivisor)) * 10**token.decimals();
 	}
 
 	function getNFTData(uint256 tokenId)
