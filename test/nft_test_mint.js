@@ -1,7 +1,7 @@
 const NFT = artifacts.require("NFT");
 const Token = artifacts.require("Token");
 
-contract("NFT Test 1", async (accounts) => {
+contract("NFT Test Mint", async (accounts) => {
 	it("Can Mint Max", async () => {
 		const nft = await NFT.deployed();
 		const token = await Token.deployed();
@@ -33,7 +33,7 @@ contract("NFT Test 1", async (accounts) => {
 	it("NFT Data Created Correctly After Minting", async () => {
 		const nft = await NFT.deployed();
 		let nftDataAtIndex1 = await nft.nftData.call(0);
-		assert.equal(nftDataAtIndex1.level, 1);
+		assert.equal(nftDataAtIndex1.level, 0);
 	});
 
 	it("NFT Total Supply Is Correct After Minting", async () => {

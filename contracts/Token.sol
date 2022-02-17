@@ -44,9 +44,9 @@ contract Token is ERC20, PauseOwners {
 
 	constructor(address gameAddress, address nftAddress) ERC20("Token", "TKN") {
 		developmentAddress = payable(msg.sender);
-		_mint(developmentAddress, 1000 * 10**decimals()); // For adding liquidity and team tokens
-		_mint(gameAddress, 1000 * 10**decimals()); // Used as game rewards
-		_mint(nftAddress, 1000 * 10**decimals()); // Used as NFT rewards
+		_mint(developmentAddress, 3333 * 10**decimals()); // For adding liquidity and team tokens
+		_mint(gameAddress, 3333 * 10**decimals()); // Used as game rewards
+		_mint(nftAddress, 3333 * 10**decimals()); // Used as NFT rewards
 		isExcludedFromTax[gameAddress] = true;
 		isExcludedFromTax[nftAddress] = true;
 	}
@@ -85,7 +85,7 @@ contract Token is ERC20, PauseOwners {
 		address recipient,
 		uint256 amount
 	) internal virtual override checkPaused {
-		// Temp local variables for setting antibot taxes
+		// Temporary local variables for setting antibot taxes
 		uint256 sellDevelopmentTax_ = sellDevelopmentTax;
 		uint256 sellMarketingTax_ = sellMarketingTax;
 		uint256 sellLiquidityTax_ = sellLiquidityTax;
@@ -142,7 +142,6 @@ contract Token is ERC20, PauseOwners {
 				}
 			}
 			super._transfer(sender, recipient, amount - totalFeeInTokens);
-			emit Transfer(sender, recipient, amount);
 		}
 	}
 

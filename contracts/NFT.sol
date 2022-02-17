@@ -22,12 +22,11 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 	uint256 public supplyMax = 1000; // Max total supply cap
 	uint256 public mintPrice = 100; // Mint price of one NFT in tokens
 	uint256 public maxTokenLevel = 10; // Amount of levels an individual NFT can be upgraded
-	uint256 public tokensPerLevel = 1000; // Amount of tokens needed to upgrade an NFT (one level)
-	uint256 public baseRewardDivisor = 10; // Helper to reduce/increase rewards
-	uint256 public levelRewardDivisor = 2; // Another helper to change the impact of token level on reward generation
+	uint256 public tokensPerLevel = 100; // Amount of tokens needed to upgrade an NFT (one level)
+	uint256 public rewardDivisor = 400000000; // Divisor variable for affecting token generation rate
 	mapping(uint256 => NFTData) public nftData; // Store NFT Data for invidividual token
 
-	Token private token; // ERC20 token
+	Token private token;
 	string private nftBaseURI =
 		"https://slimekeeper-web-dev.herokuapp.com/api/nft/data?";
 	mapping(address => uint256) private amountMinted;
@@ -70,7 +69,7 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 			_safeMint(to, currTokenId);
 			updateTokenUri(currTokenId, birthDate, 1, 0);
 			nftData[currTokenId] = NFTData({
-				level: 1,
+				level: 0,
 				birthDate: birthDate,
 				lockedAmount: 0,
 				lastClaimedDate: birthDate
@@ -78,67 +77,83 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 			tokenIds.increment();
 		}
 		amountMinted[to] += amount;
-		token.transferFrom(msg.sender, address(this), totalMintPrice);
+		require(
+			token.transferFrom(msg.sender, address(this), totalMintPrice),
+			"Token payment failed"
+		);
 		emit Minted(to, amount, birthDate);
 	}
 
-	function compound(uint256 tokenId, uint256 amount) public checkPaused {
-		uint256 tokenAmount = amount * 10**token.decimals();
+	function compound(uint256 tokenId, uint256 amountToken) public checkPaused {
+		amountToken *= 10**token.decimals();
 		require(
-			token.balanceOf(msg.sender) >= tokenAmount,
+			token.balanceOf(msg.sender) >= amountToken,
 			"Token balance too low"
 		);
 		require(
-			token.allowance(msg.sender, address(this)) >= tokenAmount,
+			token.allowance(msg.sender, address(this)) >= amountToken,
 			"Not enough allowance"
 		);
 		claim(tokenId); // Claim before compounding
 		NFTData storage data = nftData[tokenId];
 		require(data.level < maxTokenLevel, "This NFT is already max level");
-		uint256 tokensPerLevelTotal = tokensPerLevel * 10**token.decimals();
-		uint256 newLocked = data.lockedAmount + tokenAmount;
-		uint256 newLevel = newLocked / tokensPerLevelTotal;
+		uint256 tokensPerLevelDecimals = tokensPerLevel * 10**token.decimals(); // Just converting tokensPerLevel to the ERC20 decimal representation..
+		uint256 newLocked = data.lockedAmount + amountToken;
+		uint256 newLevel = newLocked / tokensPerLevelDecimals;
 		uint256 excessAmount = 0;
 		if (newLevel >= maxTokenLevel) {
-			excessAmount = newLocked - (maxTokenLevel * tokensPerLevelTotal);
-			data.level = maxTokenLevel;
+			excessAmount = newLocked - (maxTokenLevel * tokensPerLevelDecimals);
 			data.lockedAmount = newLocked - excessAmount;
+			data.level = maxTokenLevel;
 		} else {
 			data.lockedAmount = newLocked;
 			data.level = newLevel;
 		}
 		updateTokenUri(tokenId, data.level, data.birthDate, data.lockedAmount);
-		token.transferFrom(
-			msg.sender,
-			address(this),
-			tokenAmount - excessAmount
+		uint256 finalAmountToken = amountToken - excessAmount;
+		require(
+			token.transferFrom(msg.sender, address(this), finalAmountToken),
+			"Token payment failed"
 		);
-		emit Compounded(msg.sender, tokenAmount, block.timestamp);
+		emit Compounded(msg.sender, finalAmountToken, block.timestamp);
 	}
 
 	function claim(uint256 tokenId) public checkPaused {
-		require(_exists(tokenId), "This token ID does not exist");
+		NFTData storage data = nftData[tokenId];
+		uint256 amountReward = reward(tokenId);
 		require(
 			ownerOf(tokenId) == msg.sender,
 			"Sender does not own this token"
 		);
-		NFTData storage data = nftData[tokenId];
-		uint256 rewardAmount = reward(tokenId);
-		data.lastClaimedDate = block.timestamp;
-		require(
-			token.balanceOf(address(this)) >= rewardAmount,
-			"Not enough balance to withdraw"
-		);
-		token.transferFrom(address(this), msg.sender, rewardAmount);
-		emit Claimed(msg.sender, rewardAmount, block.timestamp);
+		if (amountReward > 0) {
+			data.lastClaimedDate = block.timestamp;
+			require(
+				token.balanceOf(address(this)) >= amountReward,
+				"Not enough contract token balance to claim"
+			);
+			require(
+				token.transferFrom(address(this), msg.sender, amountReward),
+				"Token transfer failed"
+			);
+			emit Claimed(msg.sender, amountReward, block.timestamp);
+		}
 	}
 
 	function reward(uint256 tokenId) public view returns (uint256) {
 		require(_exists(tokenId), "This token ID does not exist");
 		NFTData storage data = nftData[tokenId];
+		// uint256 nftSupply = totalSupply();
+		// uint256 timeValue = (block.timestamp - data.lastClaimedDate) /
+		// 	timeRewardDivisor;
+		// uint256 levelValue = ((data.level + 1) * 100) / levelRewardDivisor;
+		// return timeValue * levelValue * 10**token.decimals();
+		uint256 tokenSupply = token.totalSupply() / (10**token.decimals()); // Token supply without decimals
+		// Reward is basically: ((Time in seconds since last claim * token supply) / rewardDivisor) * NFT level
 		return
-			(((block.timestamp - data.lastClaimedDate) / baseRewardDivisor) *
-				(data.level / levelRewardDivisor)) * 10**token.decimals();
+			(((block.timestamp - data.lastClaimedDate) * tokenSupply) /
+				rewardDivisor) *
+			(data.level + 1) *
+			10**token.decimals();
 	}
 
 	function getNFTData(uint256 tokenId)
@@ -181,11 +196,8 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		tokensPerLevel = newTokensPerLevel;
 	}
 
-	function setbaseRewardDivisor(uint256 newbaseRewardDivisor)
-		external
-		onlyOwners
-	{
-		baseRewardDivisor = newbaseRewardDivisor;
+	function setRewardDivisor(uint256 newRewardDivisor) external onlyOwners {
+		rewardDivisor = newRewardDivisor;
 	}
 
 	function setTokenAddress(address newTokenAddress) external onlyOwners {
