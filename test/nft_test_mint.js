@@ -2,9 +2,15 @@ const NFT = artifacts.require("NFT");
 const Token = artifacts.require("Token");
 
 contract("NFT Test Mint", async (accounts) => {
+	let nft;
+	let token;
+
+	beforeEach(async () => {
+		nft = await NFT.deployed();
+		token = await Token.deployed();
+	});
+
 	it("Can Mint Max", async () => {
-		const nft = await NFT.deployed();
-		const token = await Token.deployed();
 		await token.approve.sendTransaction(
 			nft.address,
 			web3.utils.toBN("500000000000000000000"),
@@ -18,7 +24,6 @@ contract("NFT Test Mint", async (accounts) => {
 	});
 
 	it("Can't Mint More Than Max", async () => {
-		const nft = await NFT.deployed();
 		let failed = false;
 		try {
 			await nft.mint.sendTransaction(accounts[0], 5, {
@@ -31,20 +36,16 @@ contract("NFT Test Mint", async (accounts) => {
 	});
 
 	it("NFT Data Created Correctly After Minting", async () => {
-		const nft = await NFT.deployed();
-		let nftDataAtIndex1 = await nft.nftData.call(0);
-		assert.equal(nftDataAtIndex1.level, 0);
+		let nftDataAtIndex1 = await nft.getNFTData.call(0);
+		assert.equal(nftDataAtIndex1[0], 0);
 	});
 
 	it("NFT Total Supply Is Correct After Minting", async () => {
-		const nft = await NFT.deployed();
 		let totalSupply = await nft.totalSupply();
 		assert.equal(totalSupply, 5);
 	});
 
 	it("NFT Total Supply Is Correct After Minting Once More From Different Address", async () => {
-		const nft = await NFT.deployed();
-		const token = await Token.deployed();
 		await token.transfer.sendTransaction(
 			accounts[1],
 			web3.utils.toBN("400000000000000000000"),

@@ -23,14 +23,17 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 	uint256 public mintPrice = 100; // Mint price of one NFT in tokens
 	uint256 public maxTokenLevel = 10; // Amount of levels an individual NFT can be upgraded
 	uint256 public tokensPerLevel = 100; // Amount of tokens needed to upgrade an NFT (one level)
-	uint256 public rewardDivisor = 400000000; // Divisor variable for affecting token generation rate
-	mapping(uint256 => NFTData) public nftData; // Store NFT Data for invidividual token
+	uint256 public rewardDivisor = 690000000; // Divisor variable for affecting token generation rate
 
 	Token private token;
+
+	Counters.Counter private tokenIds;
+
 	string private nftBaseURI =
 		"https://slimekeeper-web-dev.herokuapp.com/api/nft/data?";
+
 	mapping(address => uint256) private amountMinted;
-	Counters.Counter private tokenIds;
+	mapping(uint256 => NFTData) private nftData; // Store NFT Data for invidividual token
 
 	// Represents in-game properties
 	struct NFTData {
@@ -94,10 +97,10 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 			token.allowance(msg.sender, address(this)) >= amountToken,
 			"Not enough allowance"
 		);
-		claim(tokenId); // Claim before compounding
+		claimReward(tokenId); // Claim before compounding
 		NFTData storage data = nftData[tokenId];
 		require(data.level < maxTokenLevel, "This NFT is already max level");
-		uint256 tokensPerLevelDecimals = tokensPerLevel * 10**token.decimals(); // Just converting tokensPerLevel to the ERC20 decimal representation..
+		uint256 tokensPerLevelDecimals = tokensPerLevel * 10**token.decimals();
 		uint256 newLocked = data.lockedAmount + amountToken;
 		uint256 newLevel = newLocked / tokensPerLevelDecimals;
 		uint256 excessAmount = 0;
@@ -118,19 +121,20 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		emit Compounded(msg.sender, finalAmountToken, block.timestamp);
 	}
 
-	function claim(uint256 tokenId) public checkPaused {
-		NFTData storage data = nftData[tokenId];
-		uint256 amountReward = reward(tokenId);
+	function claimReward(uint256 tokenId) public checkPaused {
+		require(_exists(tokenId), "Token ID does not exist");
 		require(
 			ownerOf(tokenId) == msg.sender,
 			"Sender does not own this token"
 		);
+		uint256 amountReward = getReward(tokenId);
 		if (amountReward > 0) {
-			data.lastClaimedDate = block.timestamp;
+			nftData[tokenId].lastClaimedDate = block.timestamp;
 			require(
 				token.balanceOf(address(this)) >= amountReward,
 				"Not enough contract token balance to claim"
 			);
+			token.approve(address(this), amountReward);
 			require(
 				token.transferFrom(address(this), msg.sender, amountReward),
 				"Token transfer failed"
@@ -139,21 +143,24 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		}
 	}
 
-	function reward(uint256 tokenId) public view returns (uint256) {
+	function getReward(uint256 tokenId) public view returns (uint256) {
 		require(_exists(tokenId), "This token ID does not exist");
 		NFTData storage data = nftData[tokenId];
-		// uint256 nftSupply = totalSupply();
-		// uint256 timeValue = (block.timestamp - data.lastClaimedDate) /
-		// 	timeRewardDivisor;
-		// uint256 levelValue = ((data.level + 1) * 100) / levelRewardDivisor;
-		// return timeValue * levelValue * 10**token.decimals();
-		uint256 tokenSupply = token.totalSupply() / (10**token.decimals()); // Token supply without decimals
-		// Reward is basically: ((Time in seconds since last claim * token supply) / rewardDivisor) * NFT level
-		return
-			(((block.timestamp - data.lastClaimedDate) * tokenSupply) /
-				rewardDivisor) *
-			(data.level + 1) *
-			10**token.decimals();
+		uint256 timeSinceLastClaim = block.timestamp - data.lastClaimedDate;
+		return calculateReward(timeSinceLastClaim, data.level);
+	}
+
+	// Return the approximate APR considering certain level
+	function approxAPR(uint256 level) external view returns (uint256) {
+		return (calculateReward(365 days, level) * 100) / token.totalSupply();
+	}
+
+	function calculateReward(uint256 time, uint256 level)
+		public
+		view
+		returns (uint256)
+	{
+		return (time * (level + 1) * token.totalSupply()) / rewardDivisor;
 	}
 
 	function getNFTData(uint256 tokenId)
@@ -212,10 +219,6 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		return tokenIds.current();
 	}
 
-	function _baseURI() internal view override returns (string memory) {
-		return nftBaseURI;
-	}
-
 	function updateTokenUri(
 		uint256 tokenId,
 		uint256 level,
@@ -235,6 +238,10 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 				)
 			)
 		);
+	}
+
+	function _baseURI() internal view override returns (string memory) {
+		return nftBaseURI;
 	}
 
 	// The following functions are overrides required by Solidity.
