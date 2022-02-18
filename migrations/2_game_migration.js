@@ -3,6 +3,8 @@ const NFT = artifacts.require("NFT");
 const Token = artifacts.require("Token");
 
 module.exports = async function (deployer, network, accounts) {
+	process.env.NETWORK = network;
+
 	// Deploy game contract itself
 	await deployer.deploy(Game, { from: accounts[0] });
 	const gameContract = await Game.deployed();

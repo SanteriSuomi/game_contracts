@@ -53,22 +53,19 @@ contract Token is ERC20, PauseOwners {
 
 	receive() external payable {} // Must be defined so the contract is able to receive ETH from swaps
 
-	function addLiquidityAntiBot(
-		uint256 amountToken,
-		uint256 amountTokenMin,
-		uint256 amountETHmin
-	) public payable onlyOwners {
+	function addLiquidity(uint256 amountToken) external payable onlyOwners {
 		// Add initial liquidity and enabled the "anti-bot" feature
 		require(address(router) != address(0), "Router not set yet");
+		uint256 amountTokenDecimals = amountToken * (10**decimals());
 		require(
-			balanceOf(msg.sender) >= amountToken,
+			balanceOf(msg.sender) >= amountTokenDecimals,
 			"Sender does not have enough token balance"
 		);
 		router.addLiquidityETH{ value: msg.value }(
 			address(this),
-			amountToken,
-			amountTokenMin,
-			amountETHmin,
+			amountTokenDecimals,
+			0,
+			0,
 			developmentAddress,
 			block.timestamp
 		);
@@ -214,7 +211,8 @@ contract Token is ERC20, PauseOwners {
 		uint256 half2 = amountToken - half1;
 		uint256 balanceBeforeSwap = address(this).balance;
 		uint256 balanceAfterSwap = swapTokensToETH(half1); // Swap half of the tokens to BNB
-		addTaxLiquidity(half2, balanceAfterSwap - balanceBeforeSwap); // Add the non-swapped tokens and the swapped BNB to liquidity
+		uint256 swapDifference = balanceAfterSwap - balanceBeforeSwap;
+		addLiquidityTax(half2, swapDifference); // Add the non-swapped tokens and the swapped BNB to liquidity
 	}
 
 	function swapTokensToETH(uint256 amountToken) private returns (uint256) {
@@ -232,7 +230,7 @@ contract Token is ERC20, PauseOwners {
 		return address(this).balance; // Balance in wei after taking fees
 	}
 
-	function addTaxLiquidity(uint256 amountToken, uint256 amountEth) private {
+	function addLiquidityTax(uint256 amountToken, uint256 amountEth) private {
 		_approve(address(this), address(router), amountToken);
 		router.addLiquidityETH{ value: amountEth }(
 			address(this),
