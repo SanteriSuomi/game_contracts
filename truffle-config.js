@@ -18,10 +18,8 @@
  *
  */
 
-// const HDWalletProvider = require('@truffle/hdwallet-provider');
-//
-// const fs = require('fs');
-// const mnemonic = fs.readFileSync(".secret").toString().trim();
+require("dotenv").config();
+const HDWalletProvider = require("@truffle/hdwallet-provider");
 
 module.exports = {
 	/**
@@ -33,13 +31,30 @@ module.exports = {
 	 *
 	 * $ truffle test --network <network-name>
 	 */
-
 	networks: {
-		dev: {
+		local: {
 			// Development network (local ganache)
 			host: "127.0.0.1",
 			port: 7545,
 			network_id: "5777",
+		},
+
+		testnet: {
+			provider: () =>
+				new HDWalletProvider(
+					process.env.MNEMONIC,
+					`wss://speedy-nodes-nyc.moralis.io/${process.env.NODE_ID}/bsc/testnet/ws`
+					// `https://speedy-nodes-nyc.moralis.io/${process.env.NODE_ID}/bsc/testnet`
+					// `https://data-seed-prebsc-1-s1.binance.org:8545/`
+				),
+			network_id: 97,
+			// gas: 5000000,
+			// gasPrice: 45000000000,
+			skipDryRun: false,
+			websocket: false,
+			confirmations: 1,
+			timeoutBlocks: 200,
+			networkCheckTimeout: 1000000,
 		},
 		// Useful for testing. The `development` name is special - truffle uses it by default
 		// if it's defined here and no other network is specified at the command line.

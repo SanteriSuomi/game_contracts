@@ -671,7 +671,7 @@
   "sourceMap": "69:367:22:-:0;;;94:33;;;-1:-1:-1;;;;;;94:33:22;117:10;94:33;;;69:367;;;;;;;;;;;;;;;;",
   "deployedSourceMap": "69:367:22:-:0;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;132:36;;;;;;;;;160:25:27;;;148:2;133:18;132:36:22;;;;;;;;94:33;;;;;-1:-1:-1;;;;;94:33:22;;;;;;-1:-1:-1;;;;;360:32:27;;;342:51;;330:2;315:18;94:33:22;196:203:27;328:105:22;;;;;;:::i;:::-;;:::i;:::-;;;234:5;;-1:-1:-1;;;;;234:5:22;220:10;:19;204:104;;;;-1:-1:-1;;;204:104:22;;791:2:27;204:104:22;;;773:21:27;830:2;810:18;;;803:30;869:34;849:18;;;842:62;-1:-1:-1;;;920:18:27;;;913:49;979:19;;204:104:22;;;;;;;;391:24:::1;:36:::0;328:105::o;404:180:27:-;463:6;516:2;504:9;495:7;491:23;487:32;484:52;;;532:1;529;522:12;484:52;-1:-1:-1;555:23:27;;404:180;-1:-1:-1;404:180:27:o",
   "source": "// SPDX-License-Identifier: MIT\r\npragma solidity >=0.4.22 <0.9.0;\r\n\r\ncontract Migrations {\r\n  address public owner = msg.sender;\r\n  uint public last_completed_migration;\r\n\r\n  modifier restricted() {\r\n    require(\r\n      msg.sender == owner,\r\n      \"This function is restricted to the contract's owner\"\r\n    );\r\n    _;\r\n  }\r\n\r\n  function setCompleted(uint completed) public restricted {\r\n    last_completed_migration = completed;\r\n  }\r\n}\r\n",
-  "sourcePath": "C:\\Users\\sants\\Desktop\\slimekeeper\\slimekeeper_contracts\\contracts\\Migrations.sol",
+  "sourcePath": "C:\\Users\\razor\\Desktop\\slimekeeper_contracts\\contracts\\Migrations.sol",
   "ast": {
     "absolutePath": "project:/contracts/Migrations.sol",
     "exportedSymbols": {
@@ -1471,6 +1471,12 @@
     "version": "0.8.11+commit.d7f03943.Emscripten.clang"
   },
   "networks": {
+    "97": {
+      "events": {},
+      "links": {},
+      "address": "0xf054580478D9d8f7220f48bA6E6dAbB4D66FD617",
+      "transactionHash": "0x6239ea9ccfeba09b01105df9adbd49670e6fa40c9ffed255ca2c8aa76c08a201"
+    },
     "5777": {
       "events": {},
       "links": {},
@@ -1478,8 +1484,8 @@
       "transactionHash": "0xbf6d0faca156ba95449960ab7aeb4927692a992a1ee2abe8e43858f8173f4928"
     }
   },
-  "schemaVersion": "3.4.4",
-  "updatedAt": "2022-02-18T15:13:06.287Z",
+  "schemaVersion": "3.4.3",
+  "updatedAt": "2022-02-19T00:55:19.645Z",
   "networkType": "ethereum",
   "devdoc": {
     "kind": "dev",

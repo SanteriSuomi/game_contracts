@@ -2,7 +2,7 @@ const NFT = artifacts.require("NFT");
 const Token = artifacts.require("Token");
 
 contract("NFT Test Mint", async (accounts) => {
-	if (process.env.NETWORK !== 5777) return; // If not a local test network..
+	// if (process.env.NETWORK !== 5777) return; // If not a local test network..
 
 	let nft;
 	let token;
