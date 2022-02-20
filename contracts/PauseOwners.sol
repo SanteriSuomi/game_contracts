@@ -5,7 +5,7 @@ pragma solidity >=0.4.22 <0.9.0;
 import "./Owners.sol";
 
 contract PauseOwners is Owners {
-	bool internal isPaused;
+	bool public isPaused = false;
 
 	modifier checkPaused() {
 		if (!isOwner(msg.sender)) {

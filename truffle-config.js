@@ -31,21 +31,27 @@ module.exports = {
 	 *
 	 * $ truffle test --network <network-name>
 	 */
+	plugins: ["truffle-plugin-verify"],
+	api_keys: {
+		bscscan: process.env.API_KEY,
+	},
 	networks: {
 		local: {
-			// Development network (local ganache)
+			// Development network (local ganache, ethereum)
 			host: "127.0.0.1",
 			port: 7545,
 			network_id: "5777",
 		},
 
 		testnet: {
+			// BSC Testnet
 			provider: () =>
 				new HDWalletProvider(
 					process.env.MNEMONIC,
-					`wss://speedy-nodes-nyc.moralis.io/${process.env.NODE_ID}/bsc/testnet/ws`
+					// `wss://speedy-nodes-nyc.moralis.io/${process.env.NODE_ID}/bsc/testnet/ws`
 					// `https://speedy-nodes-nyc.moralis.io/${process.env.NODE_ID}/bsc/testnet`
-					// `https://data-seed-prebsc-1-s1.binance.org:8545/`
+					`https://data-seed-prebsc-1-s1.binance.org:8545/`
+					// "https://data-seed-prebsc-2-s1.binance.org:8545/"
 				),
 			network_id: 97,
 			// gas: 5000000,

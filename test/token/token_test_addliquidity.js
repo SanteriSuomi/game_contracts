@@ -1,7 +1,7 @@
 const Token = artifacts.require("Token");
 const time = require("@openzeppelin/test-helpers").time;
 
-contract("NFT Test Claim", async (accounts) => {
+contract("Token Test Add Liquidity", async (accounts) => {
 	let token;
 
 	beforeEach(async () => {
