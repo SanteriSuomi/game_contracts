@@ -131,12 +131,7 @@ contract Token is ERC20, PauseOwners {
 			uint256 sellDevelopmentTax_,
 			uint256 sellMarketingTax_,
 			uint256 sellLiquidityTax_
-		) = antiBotGuard(sender);
-
-		require(
-			!antiBotBlacklist[sender] && !antiBotBlacklist[recipient],
-			"Sender or recipient blacklisted"
-		);
+		) = antiBotGuard(sender, recipient);
 
 		uint256 tokenBalance = balanceOf(address(this));
 		if (
@@ -169,7 +164,7 @@ contract Token is ERC20, PauseOwners {
 		super._transfer(sender, recipient, amount);
 	}
 
-	function antiBotGuard(address sender)
+	function antiBotGuard(address sender, address recipient)
 		private
 		returns (
 			uint256 sellDevelopmentTax_,
@@ -189,6 +184,11 @@ contract Token is ERC20, PauseOwners {
 				antiBotEnabled = false;
 			}
 		}
+
+		require(
+			!antiBotBlacklist[sender] && !antiBotBlacklist[recipient],
+			"Sender or recipient blacklisted"
+		);
 	}
 
 	function swapAndTransfer(
