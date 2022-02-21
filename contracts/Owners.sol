@@ -32,7 +32,7 @@ contract Owners {
 	}
 
 	modifier onlyOwners() {
-		require(_ownerMap[msg.sender] == true, "Caller is not an owner");
+		require(_ownerMap[msg.sender], "Caller is not an owner");
 		_;
 	}
 
@@ -43,7 +43,7 @@ contract Owners {
 	}
 
 	function removeOwner(address owner) external onlyOwners {
-		require(_ownerMap[owner] == true, "Address is not an owner");
+		require(_ownerMap[owner], "Address is not an owner");
 		for (uint256 i = 0; i < _ownerList.length; i++) {
 			if (_ownerList[i] == owner) {
 				_ownerMap[owner] = false;

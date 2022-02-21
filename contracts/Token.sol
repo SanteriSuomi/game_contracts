@@ -20,16 +20,16 @@ contract Token is ERC20, PauseOwners {
 	uint256 private antiBotBlockTime = 2;
 	uint256 private antiBotBlockEnd;
 
-	mapping(address => bool) antiBotBlacklist;
-
 	uint256 private antiBotSellDevelopmentTax = 10;
 	uint256 private antiBotSellMarketingTax = 10;
 	uint256 private antiBotSellLiquidityTax = 5;
 
-	bool public liquidityTaxEnabled = true;
-	bool public initialLiquidityAdded;
-	uint256 private minBalanceToSwapAndTransfer;
+	mapping(address => bool) antiBotBlacklist;
 
+	bool public liquidityTaxEnabled = true;
+	bool private initialLiquidityAdded;
+
+	uint256 private minBalanceToSwapAndTransfer;
 	bool private inSwapAndTransfer;
 
 	uint256 public sellDevelopmentTax = 4;
@@ -60,6 +60,7 @@ contract Token is ERC20, PauseOwners {
 		isExcludedFromTax[gameAddress_] = true;
 		isExcludedFromTax[nftAddress_] = true;
 		isExcludedFromTax[address(this)] = true;
+		setIsPaused(true); // Pause trading at the beginning until liquidity is added
 	}
 
 	receive() external payable {} // Must be defined so the contract is able to receive ETH from swaps
@@ -87,13 +88,14 @@ contract Token is ERC20, PauseOwners {
 			developmentAddress,
 			block.timestamp + 1 hours
 		);
-		initialLiquidityAdded = true;
 		if (!antiBotRanOnce) {
 			antiBotEnabled = true;
 			antiBotRanOnce = true;
 			antiBotTaxesEndTime = block.timestamp + antiBotTaxesTimeInSeconds;
 			antiBotBlockEnd = block.number + antiBotBlockTime;
 		}
+		initialLiquidityAdded = true;
+		setIsPaused(false);
 	}
 
 	function _transfer(
@@ -101,17 +103,11 @@ contract Token is ERC20, PauseOwners {
 		address recipient,
 		uint256 amount
 	) internal virtual override checkPaused {
-		if (
-			!initialLiquidityAdded &&
-			msg.sender == address(router) &&
-			tx.origin == developmentAddress
-		) {
-			//Initial liquidity transfer
+		if (!initialLiquidityAdded && tx.origin == developmentAddress) {
+			//Initial liquidity transfer from development address
 			_approve(sender, msg.sender, amount);
 			super._transfer(sender, recipient, amount);
 			return;
-		} else if (!initialLiquidityAdded) {
-			revert("Initial liquidity not added");
 		}
 
 		if (amount == 0) {
@@ -150,10 +146,10 @@ contract Token is ERC20, PauseOwners {
 		uint256 tokenBalance = balanceOf(address(this));
 		if (
 			!inSwapAndTransfer &&
-			tokenBalance >= (minBalanceToSwapAndTransfer * 10**18) &&
-			sender != address(pair)
+			tokenBalance >= minBalanceToSwapAndTransfer &&
+			recipient == address(pair) // Is a sell
 		) {
-			inSwapAndTransfer = true;
+			inSwapAndTransfer = true; // Lock swap and transfer
 
 			totalTax =
 				sellDevelopmentTax_ +
@@ -176,8 +172,9 @@ contract Token is ERC20, PauseOwners {
 				value: ethForMarketing
 			}("");
 
-			swapAndLiquify(liquidityTax);
-
+			if (liquidityTaxEnabled) {
+				swapAndLiquify(liquidityTax);
+			}
 			inSwapAndTransfer = false;
 
 			require(
@@ -256,6 +253,22 @@ contract Token is ERC20, PauseOwners {
 		return address(this).balance;
 	}
 
+	function setAntiBotSellTaxes(
+		uint256 sellDevelopmentTax_,
+		uint256 sellMarketingTax_,
+		uint256 sellLiquidityTax_
+	) external onlyOwners {
+		require(antiBotEnabled, "Antibot period has passed");
+		require(
+			(sellDevelopmentTax_ + sellMarketingTax_ + sellLiquidityTax_) <=
+				MAX_TOTAL_FEE,
+			"Total taxes are above the allowed amount"
+		);
+		antiBotSellDevelopmentTax = sellDevelopmentTax_;
+		antiBotSellMarketingTax = sellMarketingTax_;
+		antiBotSellLiquidityTax = sellLiquidityTax_;
+	}
+
 	function setSellTaxes(
 		uint256 sellDevelopmentTax_,
 		uint256 sellMarketingTax_,
@@ -268,7 +281,7 @@ contract Token is ERC20, PauseOwners {
 		);
 		sellDevelopmentTax = sellDevelopmentTax_;
 		sellMarketingTax = sellMarketingTax_;
-		sellLiquidityTax = sellDevelopmentTax_;
+		sellLiquidityTax = sellLiquidityTax_;
 	}
 
 	function setBuyTaxes(
@@ -302,7 +315,7 @@ contract Token is ERC20, PauseOwners {
 		liquidityAddress = payable(liquidityAddress_);
 	}
 
-	function removeBlacklist(address address_) external onlyOwners {
+	function removeBlacklistedAddress(address address_) external onlyOwners {
 		antiBotBlacklist[address_] = false;
 	}
 

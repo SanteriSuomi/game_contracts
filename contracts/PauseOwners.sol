@@ -14,7 +14,7 @@ contract PauseOwners is Owners {
 		_;
 	}
 
-	function setIsPaused(bool newPaused) external onlyOwners {
+	function setIsPaused(bool newPaused) public onlyOwners {
 		isPaused = newPaused;
 	}
 }
