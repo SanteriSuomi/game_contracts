@@ -27,7 +27,6 @@ contract Token is ERC20, PauseOwners {
 	mapping(address => bool) antiBotBlacklist;
 
 	bool public liquidityTaxEnabled = true;
-	bool private initialLiquidityAdded;
 
 	uint256 private minBalanceToSwapAndTransfer;
 	bool private inSwapAndTransfer;
@@ -59,7 +58,7 @@ contract Token is ERC20, PauseOwners {
 		_mint(developmentAddress, 3333 * 10**decimals()); // For adding liquidity and team tokens
 		_mint(gameAddress_, 3333 * 10**decimals()); // Used as game rewards
 		_mint(nftAddress_, 3333 * 10**decimals()); // Used as NFT rewards
-		minBalanceToSwapAndTransfer = totalSupply() / 1000; // If contract balance is min 0.1% of total supply, can sell for BNB
+		minBalanceToSwapAndTransfer = totalSupply() / 1000; // If contract balance is minimum 0.1% of total supply, swap to BNB and transfer fees
 		isExcludedFromTax[gameAddress_] = true;
 		isExcludedFromTax[nftAddress_] = true;
 		isExcludedFromTax[address(this)] = true;
@@ -99,7 +98,6 @@ contract Token is ERC20, PauseOwners {
 			block.timestamp + 1 hours
 		);
 		addingLiquidity = false;
-		initialLiquidityAdded = true;
 		if (!antiBotRanOnce) {
 			antiBotEnabled = true;
 			antiBotRanOnce = true;
@@ -114,8 +112,8 @@ contract Token is ERC20, PauseOwners {
 		address recipient,
 		uint256 amount
 	) internal virtual override checkPaused(tx.origin) {
-		if (addingLiquidity && !initialLiquidityAdded) {
-			//Initial liquidity transfer from development address
+		if (addingLiquidity) {
+			// Liquidity transfer from development address
 			_approve(sender, msg.sender, amount);
 			super._transfer(sender, recipient, amount);
 			return;
@@ -204,6 +202,7 @@ contract Token is ERC20, PauseOwners {
 		uint256 developmentTax = (tokenBalance * sellDevelopmentTax_) /
 			totalTax;
 		uint256 marketingTax = (tokenBalance * sellMarketingTax_) / totalTax;
+
 		swapAndTransferFees(developmentTax, marketingTax);
 
 		if (liquidityTaxEnabled) {
