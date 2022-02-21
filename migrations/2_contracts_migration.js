@@ -41,6 +41,7 @@ module.exports = async function (deployer, network, accounts) {
 		from: accounts[0],
 	});
 
+	// Approve token contract to spend development tokens
 	await tokenContract.approve.sendTransaction(
 		tokenContract.address,
 		web3.utils.toBN(
@@ -51,8 +52,9 @@ module.exports = async function (deployer, network, accounts) {
 		}
 	);
 
+	// Allow router to use development tokens
 	await tokenContract.approve.sendTransaction(
-		"0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3",
+		routerAddress,
 		web3.utils.toBN(
 			"115792089237316195423570985008687907853269984665640564039457584007913129639935"
 		),
@@ -61,6 +63,7 @@ module.exports = async function (deployer, network, accounts) {
 		}
 	);
 
+	// Set corrent tax addresses
 	await tokenContract.setTaxAddresses.sendTransaction(
 		accounts[0],
 		accounts[1],

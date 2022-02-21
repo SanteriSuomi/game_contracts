@@ -7,8 +7,8 @@ import "./Owners.sol";
 contract PauseOwners is Owners {
 	bool public isPaused = false;
 
-	modifier checkPaused() {
-		if (!isOwner(msg.sender)) {
+	modifier checkPaused(address address_) {
+		if (!isOwner(address_)) {
 			require(!isPaused, "Contract paused");
 		}
 		_;

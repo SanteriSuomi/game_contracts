@@ -36,13 +36,13 @@ contract Owners {
 		_;
 	}
 
-	function addOwner(address owner) external onlyOwners {
+	function addOwner(address owner) public onlyOwners {
 		_ownerMap[owner] = true;
 		_ownerList.push(owner);
 		emit OwnerAdded(msg.sender, owner, block.timestamp);
 	}
 
-	function removeOwner(address owner) external onlyOwners {
+	function removeOwner(address owner) public onlyOwners {
 		require(_ownerMap[owner], "Address is not an owner");
 		for (uint256 i = 0; i < _ownerList.length; i++) {
 			if (_ownerList[i] == owner) {

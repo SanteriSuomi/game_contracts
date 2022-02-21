@@ -32,6 +32,8 @@ contract Token is ERC20, PauseOwners {
 	uint256 private minBalanceToSwapAndTransfer;
 	bool private inSwapAndTransfer;
 
+	bool private addingLiquidity;
+
 	uint256 public sellDevelopmentTax = 4;
 	uint256 public sellMarketingTax = 4;
 	uint256 public sellLiquidityTax = 2;
@@ -53,10 +55,11 @@ contract Token is ERC20, PauseOwners {
 		ERC20("Token", "TKN")
 	{
 		developmentAddress = payable(msg.sender);
+		addOwner(developmentAddress);
 		_mint(developmentAddress, 3333 * 10**decimals()); // For adding liquidity and team tokens
 		_mint(gameAddress_, 3333 * 10**decimals()); // Used as game rewards
 		_mint(nftAddress_, 3333 * 10**decimals()); // Used as NFT rewards
-		minBalanceToSwapAndTransfer = totalSupply() / 100; // If contract balance is min 1% of total supply, can sell for BNB
+		minBalanceToSwapAndTransfer = totalSupply() / 1000; // If contract balance is min 0.1% of total supply, can sell for BNB
 		isExcludedFromTax[gameAddress_] = true;
 		isExcludedFromTax[nftAddress_] = true;
 		isExcludedFromTax[address(this)] = true;
@@ -80,6 +83,7 @@ contract Token is ERC20, PauseOwners {
 		);
 		super._transfer(msg.sender, address(this), amountToken);
 		approve(routerAddress, amountToken);
+		addingLiquidity = true;
 		router.addLiquidityETH{ value: msg.value }(
 			address(this),
 			amountToken,
@@ -88,13 +92,14 @@ contract Token is ERC20, PauseOwners {
 			developmentAddress,
 			block.timestamp + 1 hours
 		);
+		addingLiquidity = false;
+		initialLiquidityAdded = true;
 		if (!antiBotRanOnce) {
 			antiBotEnabled = true;
 			antiBotRanOnce = true;
 			antiBotTaxesEndTime = block.timestamp + antiBotTaxesTimeInSeconds;
 			antiBotBlockEnd = block.number + antiBotBlockTime;
 		}
-		initialLiquidityAdded = true;
 		setIsPaused(false);
 	}
 
@@ -102,8 +107,8 @@ contract Token is ERC20, PauseOwners {
 		address sender,
 		address recipient,
 		uint256 amount
-	) internal virtual override checkPaused {
-		if (!initialLiquidityAdded && tx.origin == developmentAddress) {
+	) internal virtual override checkPaused(tx.origin) {
+		if (addingLiquidity && !initialLiquidityAdded) {
 			//Initial liquidity transfer from development address
 			_approve(sender, msg.sender, amount);
 			super._transfer(sender, recipient, amount);
@@ -175,6 +180,7 @@ contract Token is ERC20, PauseOwners {
 			if (liquidityTaxEnabled) {
 				swapAndLiquify(liquidityTax);
 			}
+
 			inSwapAndTransfer = false;
 
 			require(

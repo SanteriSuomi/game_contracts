@@ -47,7 +47,7 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 
 	constructor() ERC721("NFT", "NFT") {}
 
-	function mint(address to, uint256 amount) public checkPaused {
+	function mint(address to, uint256 amount) public checkPaused(msg.sender) {
 		require(totalSupply() < supplyMax, "Max supply has been reached");
 		require(
 			amountMinted[to] + amount <= addressMax,
@@ -87,7 +87,10 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		emit Minted(to, amount, birthDate);
 	}
 
-	function compound(uint256 tokenId, uint256 amountToken) public checkPaused {
+	function compound(uint256 tokenId, uint256 amountToken)
+		public
+		checkPaused(msg.sender)
+	{
 		amountToken *= 10**token.decimals();
 		require(
 			token.balanceOf(msg.sender) >= amountToken,
@@ -121,7 +124,7 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		emit Compounded(msg.sender, finalAmountToken, block.timestamp);
 	}
 
-	function claimReward(uint256 tokenId) public checkPaused {
+	function claimReward(uint256 tokenId) public checkPaused(msg.sender) {
 		require(_exists(tokenId), "Token ID does not exist");
 		require(
 			ownerOf(tokenId) == msg.sender,
