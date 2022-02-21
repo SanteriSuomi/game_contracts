@@ -197,17 +197,18 @@ contract Token is ERC20, PauseOwners {
 		uint256 sellMarketingTax_,
 		uint256 sellLiquidityTax_
 	) private lockSwapAndTransfer {
-		uint256 totalTax = sellDevelopmentTax_ +
-			sellMarketingTax_ +
-			sellLiquidityTax_;
+		uint256 totalTax = sellDevelopmentTax_ + sellMarketingTax_;
+		if (liquidityTaxEnabled) {
+			totalTax += sellLiquidityTax_;
+		}
 		uint256 developmentTax = (tokenBalance * sellDevelopmentTax_) /
 			totalTax;
 		uint256 marketingTax = (tokenBalance * sellMarketingTax_) / totalTax;
-		uint256 liquidityTax = (tokenBalance * sellLiquidityTax_) / totalTax;
-
 		swapAndTransferFees(developmentTax, marketingTax);
 
 		if (liquidityTaxEnabled) {
+			uint256 liquidityTax = (tokenBalance * sellLiquidityTax_) /
+				totalTax;
 			swapAndLiquify(liquidityTax);
 		}
 	}
