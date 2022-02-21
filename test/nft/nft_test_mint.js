@@ -2,25 +2,25 @@ const NFT = artifacts.require("NFT");
 const Token = artifacts.require("Token");
 
 contract("NFT Test Mint", async (accounts) => {
-	// if (process.env.NETWORK !== 5777) return; // If not a local test network..
-
 	let nft;
 	let token;
 
 	beforeEach(async () => {
 		nft = await NFT.deployed();
 		token = await Token.deployed();
-	});
-
-	it("Can Mint Max", async () => {
 		await token.approve.sendTransaction(
 			nft.address,
-			web3.utils.toBN("500000000000000000000"),
+			web3.utils.toBN("5000000000000000000000000000000000000"),
 			{
 				from: accounts[0],
 			}
 		);
-		await nft.mint.sendTransaction(accounts[0], 5, { from: accounts[0] });
+	});
+
+	it("Can Mint Max", async () => {
+		await nft.mint.sendTransaction(accounts[0], 5, {
+			from: accounts[0],
+		});
 		let tokenCount = await nft.balanceOf(accounts[0]);
 		assert.equal(tokenCount, 5);
 	});
@@ -48,6 +48,14 @@ contract("NFT Test Mint", async (accounts) => {
 	});
 
 	it("NFT Total Supply Is Correct After Minting Once More From Different Address", async () => {
+		await token.setIsPaused.sendTransaction(false, { from: accounts[0] });
+		await token.approve.sendTransaction(
+			nft.address,
+			web3.utils.toBN("5000000000000000000000000000000000000"),
+			{
+				from: accounts[1],
+			}
+		);
 		await token.transfer.sendTransaction(
 			accounts[1],
 			web3.utils.toBN("400000000000000000000"),
@@ -55,14 +63,9 @@ contract("NFT Test Mint", async (accounts) => {
 				from: accounts[0],
 			}
 		);
-		await token.approve.sendTransaction(
-			nft.address,
-			web3.utils.toBN("500000000000000000000"),
-			{
-				from: accounts[1],
-			}
-		);
-		await nft.mint.sendTransaction(accounts[1], 1, { from: accounts[1] });
+		await nft.mint.sendTransaction(accounts[1], 1, {
+			from: accounts[1],
+		});
 		let totalSupply = await nft.totalSupply();
 		assert.equal(totalSupply, 6);
 	});

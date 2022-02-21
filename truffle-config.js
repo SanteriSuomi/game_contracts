@@ -39,6 +39,12 @@ module.exports = {
 		local: {
 			// Development network (local ganache, ethereum)
 			host: "127.0.0.1",
+			port: 8545,
+			network_id: "1",
+		},
+		local_2: {
+			// Development network (local ganache, ethereum)
+			host: "127.0.0.1",
 			port: 7545,
 			network_id: "5777",
 		},

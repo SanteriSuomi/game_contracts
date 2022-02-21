@@ -3,25 +3,25 @@ const Token = artifacts.require("Token");
 const time = require("@openzeppelin/test-helpers").time;
 
 contract("NFT Test Claim", async (accounts) => {
-	// if (process.env.NETWORK !== 5777) return; // If not a local test network..
-
 	let nft;
 	let token;
 
 	beforeEach(async () => {
 		nft = await NFT.deployed();
 		token = await Token.deployed();
-	});
-
-	it("NFT Generates Some Rewards", async () => {
 		await token.approve.sendTransaction(
 			nft.address,
-			web3.utils.toBN("1000000000000000000000000000000000000"),
+			web3.utils.toBN("5000000000000000000000000000000000000"),
 			{
 				from: accounts[0],
 			}
 		);
-		await nft.mint.sendTransaction(accounts[0], 1, { from: accounts[0] });
+	});
+
+	it("NFT Generates Some Rewards", async () => {
+		await nft.mint.sendTransaction(accounts[0], 1, {
+			from: accounts[0],
+		});
 		await time.increase(3600);
 		let rewardsAfter = await nft.getReward.call(0);
 		assert(
@@ -42,12 +42,14 @@ contract("NFT Test Claim", async (accounts) => {
 
 	it("Previous Rewards Claim Was Successful", async () => {
 		let balanceBefore = await token.balanceOf(accounts[0]);
-		try {
-			await nft.claimReward.sendTransaction(0);
-		} catch (error) {}
+		await nft.claimReward.sendTransaction(0);
 		let balanceAfter = await token.balanceOf(accounts[0]);
 		let difference = balanceAfter.sub(balanceBefore);
-		console.log((await nft.approxAPR(10)).toString());
-		assert(difference.eq(web3.utils.toBN(0)));
+		assert(
+			difference
+				.div(web3.utils.toBN("1000000000000000000")) // Token decimals
+				.lt(web3.utils.toBN("1")),
+			"Difference is not less than 1"
+		);
 	});
 });

@@ -131,11 +131,14 @@ contract Token is ERC20, PauseOwners {
 			uint256 sellLiquidityTax_
 		) = antiBotGuard(sender, recipient);
 
+		bool notExcludedFromTax = !isExcludedFromTax[sender] &&
+			!isExcludedFromTax[recipient];
 		uint256 tokenBalance = balanceOf(address(this));
 		if (
 			!inSwapAndTransfer &&
 			tokenBalance >= minBalanceToSwapAndTransfer &&
-			recipient == address(pair) // Is a sell
+			recipient == address(pair) && // Is a sell
+			notExcludedFromTax
 		) {
 			swapAndTransfer(
 				tokenBalance,
@@ -145,9 +148,7 @@ contract Token is ERC20, PauseOwners {
 			);
 		}
 
-		bool takeFee = !inSwapAndTransfer &&
-			!isExcludedFromTax[sender] &&
-			!isExcludedFromTax[recipient];
+		bool takeFee = !inSwapAndTransfer && notExcludedFromTax;
 		if (takeFee) {
 			amount = takeFees(
 				amount,
