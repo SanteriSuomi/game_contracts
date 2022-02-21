@@ -66,6 +66,12 @@ contract Token is ERC20, PauseOwners {
 		setIsPaused(true); // Pause trading at the beginning until liquidity is added
 	}
 
+	modifier lockSwapAndTransfer() {
+		inSwapAndTransfer = true;
+		_;
+		inSwapAndTransfer = false;
+	}
+
 	receive() external payable {} // Must be defined so the contract is able to receive ETH from swaps
 
 	function addLiquidity(uint256 amountToken) external payable onlyOwners {
@@ -121,10 +127,56 @@ contract Token is ERC20, PauseOwners {
 		}
 
 		// Temporary local variables for setting antibot taxes
-		uint256 sellDevelopmentTax_ = sellDevelopmentTax;
-		uint256 sellMarketingTax_ = sellMarketingTax;
-		uint256 sellLiquidityTax_ = sellLiquidityTax;
+		(
+			uint256 sellDevelopmentTax_,
+			uint256 sellMarketingTax_,
+			uint256 sellLiquidityTax_
+		) = antiBotGuard(sender);
 
+		require(
+			!antiBotBlacklist[sender] && !antiBotBlacklist[recipient],
+			"Sender or recipient blacklisted"
+		);
+
+		uint256 tokenBalance = balanceOf(address(this));
+		if (
+			!inSwapAndTransfer &&
+			tokenBalance >= minBalanceToSwapAndTransfer &&
+			recipient == address(pair) // Is a sell
+		) {
+			swapAndTransfer(
+				tokenBalance,
+				sellDevelopmentTax_,
+				sellMarketingTax_,
+				sellLiquidityTax_
+			);
+		}
+
+		bool takeFee = !inSwapAndTransfer &&
+			!isExcludedFromTax[sender] &&
+			!isExcludedFromTax[recipient];
+		if (takeFee) {
+			amount = takeFees(
+				amount,
+				sender,
+				recipient,
+				sellDevelopmentTax_,
+				sellMarketingTax_,
+				sellLiquidityTax_
+			);
+		}
+
+		super._transfer(sender, recipient, amount);
+	}
+
+	function antiBotGuard(address sender)
+		private
+		returns (
+			uint256 sellDevelopmentTax_,
+			uint256 sellMarketingTax_,
+			uint256 sellLiquidityTax_
+		)
+	{
 		if (antiBotEnabled) {
 			if (block.number <= antiBotBlockEnd) {
 				antiBotBlacklist[sender] = true;
@@ -137,88 +189,49 @@ contract Token is ERC20, PauseOwners {
 				antiBotEnabled = false;
 			}
 		}
+	}
 
-		require(
-			!antiBotBlacklist[sender] && !antiBotBlacklist[recipient],
-			"Sender or recipient blacklisted"
+	function swapAndTransfer(
+		uint256 tokenBalance,
+		uint256 sellDevelopmentTax_,
+		uint256 sellMarketingTax_,
+		uint256 sellLiquidityTax_
+	) private lockSwapAndTransfer {
+		uint256 totalTax = sellDevelopmentTax_ +
+			sellMarketingTax_ +
+			sellLiquidityTax_;
+		uint256 developmentTax = (tokenBalance * sellDevelopmentTax_) /
+			totalTax;
+		uint256 marketingTax = (tokenBalance * sellMarketingTax_) / totalTax;
+		uint256 liquidityTax = (tokenBalance * sellLiquidityTax_) / totalTax;
+
+		swapAndTransferFees(developmentTax, marketingTax);
+
+		if (liquidityTaxEnabled) {
+			swapAndLiquify(liquidityTax);
+		}
+	}
+
+	function swapAndTransferFees(uint256 developmentTax, uint256 marketingTax)
+		private
+	{
+		uint256 ethBalance = swapTokensToETH(developmentTax + marketingTax);
+		uint256 ethForDevelopment = (ethBalance * developmentTax) /
+			(developmentTax + marketingTax);
+		uint256 ethForMarketing = (ethBalance * marketingTax) /
+			(developmentTax + marketingTax);
+
+		(bool devSuccess, ) = developmentAddress.call{
+			value: ethForDevelopment
+		}("");
+		(bool marSuccess, ) = marketingAddress.call{ value: ethForMarketing }(
+			""
 		);
 
-		uint256 totalTax = 0;
-		uint256 developmentTax = 0;
-		uint256 marketingTax = 0;
-		uint256 liquidityTax = 0;
-
-		uint256 tokenBalance = balanceOf(address(this));
-		if (
-			!inSwapAndTransfer &&
-			tokenBalance >= minBalanceToSwapAndTransfer &&
-			recipient == address(pair) // Is a sell
-		) {
-			inSwapAndTransfer = true; // Lock swap and transfer
-
-			totalTax =
-				sellDevelopmentTax_ +
-				sellMarketingTax_ +
-				sellLiquidityTax_;
-			developmentTax = (tokenBalance * sellDevelopmentTax_) / totalTax;
-			marketingTax = (tokenBalance * sellMarketingTax_) / totalTax;
-			liquidityTax = (tokenBalance * sellLiquidityTax_) / totalTax;
-
-			uint256 ethBalance = swapTokensToETH(developmentTax + marketingTax);
-			uint256 ethForDevelopment = (ethBalance * developmentTax) /
-				(developmentTax + marketingTax);
-			uint256 ethForMarketing = (ethBalance * marketingTax) /
-				(developmentTax + marketingTax);
-
-			(bool devSuccess, ) = developmentAddress.call{
-				value: ethForDevelopment
-			}("");
-			(bool marSuccess, ) = marketingAddress.call{
-				value: ethForMarketing
-			}("");
-
-			if (liquidityTaxEnabled) {
-				swapAndLiquify(liquidityTax);
-			}
-
-			inSwapAndTransfer = false;
-
-			require(
-				devSuccess && marSuccess,
-				"Couldn't send to development or marketing wallet"
-			);
-		}
-
-		totalTax = 0;
-		developmentTax = 0;
-		marketingTax = 0;
-		liquidityTax = 0;
-
-		bool takeFee = !inSwapAndTransfer &&
-			!isExcludedFromTax[sender] &&
-			!isExcludedFromTax[recipient];
-
-		if (takeFee) {
-			if (recipient == address(pair)) {
-				// Selling
-				developmentTax = (amount * sellDevelopmentTax_) / 100;
-				marketingTax = (amount * sellMarketingTax_) / 100;
-				liquidityTax = (amount * sellLiquidityTax_) / 100;
-			} else if (sender == address(pair)) {
-				// Buying
-				developmentTax = (amount * buyDevelopmentTax) / 100;
-				marketingTax = (amount * buyMarketingTax) / 100;
-				liquidityTax = (amount * buyLiquidityTax) / 100;
-			}
-			totalTax = developmentTax + marketingTax + liquidityTax;
-
-			if (totalTax > 0) {
-				super._transfer(sender, address(this), totalTax);
-				amount -= totalTax;
-			}
-		}
-
-		super._transfer(sender, recipient, amount);
+		require(
+			devSuccess && marSuccess,
+			"Couldn't send to development or marketing wallet"
+		);
 	}
 
 	function swapAndLiquify(uint256 amountToken) private {
@@ -257,6 +270,38 @@ contract Token is ERC20, PauseOwners {
 			block.timestamp + 1 minutes
 		);
 		return address(this).balance;
+	}
+
+	function takeFees(
+		uint256 amount,
+		address sender,
+		address recipient,
+		uint256 sellDevelopmentTax_,
+		uint256 sellMarketingTax_,
+		uint256 sellLiquidityTax_
+	) private returns (uint256) {
+		uint256 totalTax = 0;
+		uint256 developmentTax = 0;
+		uint256 marketingTax = 0;
+		uint256 liquidityTax = 0;
+		if (recipient == address(pair)) {
+			// Selling
+			developmentTax = (amount * sellDevelopmentTax_) / 100;
+			marketingTax = (amount * sellMarketingTax_) / 100;
+			liquidityTax = (amount * sellLiquidityTax_) / 100;
+		} else if (sender == address(pair)) {
+			// Buying
+			developmentTax = (amount * buyDevelopmentTax) / 100;
+			marketingTax = (amount * buyMarketingTax) / 100;
+			liquidityTax = (amount * buyLiquidityTax) / 100;
+		}
+		totalTax = developmentTax + marketingTax + liquidityTax;
+
+		if (totalTax > 0) {
+			super._transfer(sender, address(this), totalTax);
+			amount -= totalTax;
+		}
+		return amount;
 	}
 
 	function setAntiBotSellTaxes(
