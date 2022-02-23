@@ -2,14 +2,10 @@ const NFT = artifacts.require("NFT");
 const Token = artifacts.require("Token");
 
 contract("NFT Test Mint", async (accounts) => {
-	if (process.env.NETWORK === "local_fork") {
-		return;
-	}
-
 	let nft;
 	let token;
 
-	beforeEach(async () => {
+	before(async () => {
 		nft = await NFT.deployed();
 		token = await Token.deployed();
 		await token.approve.sendTransaction(

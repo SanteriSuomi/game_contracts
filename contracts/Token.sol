@@ -11,26 +11,32 @@ import "@uniswap/v2-periphery/contracts/libraries/UniswapV2Library.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 
 contract Token is ERC20, PauseOwners {
+	event LiquidityAdded(
+		address sender,
+		uint256 amountETH,
+		uint256 amountToken
+	);
+
 	uint256 public immutable MAX_TOTAL_FEE = 25; // We can never surpass this total fee
 
 	bool public antiBotEnabled;
 	bool private antiBotRanOnce; // We can only run antibot once, when initial liquidity is added
+	uint256 public antiBotTaxesEndTime; // Time when antibot taxes end
+	uint256 public antiBotBlockEndBlock; // Block when antibot blacklister no longer works
 	uint256 private antiBotTaxesTimeInSeconds = 3600;
-	uint256 private antiBotTaxesEndTime;
 	uint256 private antiBotBlockTime = 2;
-	uint256 private antiBotBlockEnd;
 
 	uint256 private antiBotSellDevelopmentTax = 10;
 	uint256 private antiBotSellMarketingTax = 10;
 	uint256 private antiBotSellLiquidityTax = 5;
 
-	mapping(address => bool) antiBotBlacklist;
+	mapping(address => bool) public antiBotBlacklist;
 
 	bool public liquidityTaxEnabled = true;
-	bool private addingLiquidity;
 
 	uint256 private minBalanceToSwapAndTransfer;
 	bool private inSwapAndTransfer;
+	bool private addingLiquidity;
 
 	uint256 public sellDevelopmentTax = 4;
 	uint256 public sellMarketingTax = 4;
@@ -60,6 +66,8 @@ contract Token is ERC20, PauseOwners {
 		isExcludedFromTax[gameAddress_] = true;
 		isExcludedFromTax[nftAddress_] = true;
 		isExcludedFromTax[address(this)] = true;
+		isExcludedFromTax[address(router)] = true;
+		isExcludedFromTax[address(pair)] = true;
 		setIsPaused(true); // Pause trading at the beginning until liquidity is added
 	}
 
@@ -69,10 +77,17 @@ contract Token is ERC20, PauseOwners {
 		inSwapAndTransfer = false;
 	}
 
+	modifier lockAddingLiquidity() {
+		addingLiquidity = true;
+		_;
+		addingLiquidity = false;
+	}
+
 	receive() external payable {} // Must be defined so the contract is able to receive ETH from swaps
 
 	function addLiquidity(uint256 amountToken) external payable onlyOwners {
 		// Add initial liquidity and enabled the "anti-bot" feature
+		require(!addingLiquidity, "Currently adding liquidity");
 		address routerAddress = address(router);
 		require(routerAddress != address(0), "Router not set yet");
 		amountToken *= (10**decimals());
@@ -85,25 +100,15 @@ contract Token is ERC20, PauseOwners {
 			"Not enough allowance given to the contract"
 		);
 
-		_approve(address(this), routerAddress, amountToken);
 		_approve(msg.sender, routerAddress, amountToken);
 		super._transfer(msg.sender, address(this), amountToken);
 
-		addingLiquidity = true;
-		router.addLiquidityETH{ value: msg.value }(
-			address(this),
-			amountToken,
-			amountToken,
-			msg.value,
-			developmentAddress,
-			block.timestamp + 1 hours
-		);
-		addingLiquidity = false;
+		addLiquidity(amountToken, msg.value);
 		if (!antiBotRanOnce) {
 			antiBotEnabled = true;
 			antiBotRanOnce = true;
 			antiBotTaxesEndTime = block.timestamp + antiBotTaxesTimeInSeconds;
-			antiBotBlockEnd = block.number + antiBotBlockTime;
+			antiBotBlockEndBlock = block.number + antiBotBlockTime;
 		}
 		setIsPaused(false);
 	}
@@ -113,24 +118,20 @@ contract Token is ERC20, PauseOwners {
 		address recipient,
 		uint256 amount
 	) internal virtual override checkPaused(tx.origin) {
-		// if (addingLiquidity) {
-		// 	// Liquidity transfer from development address
-		// 	_approve(sender, msg.sender, amount);
-		// 	super._transfer(sender, recipient, amount);
-		// 	return;
-		// }
-
 		if (amount == 0) {
 			super._transfer(sender, recipient, 0);
 			return;
 		}
 
-		// Temporary local variables for setting antibot taxes
 		(
 			uint256 sellDevelopmentTax_,
 			uint256 sellMarketingTax_,
-			uint256 sellLiquidityTax_
+			uint256 sellLiquidityTax_,
+			bool guardActivated
 		) = antiBotGuard(sender, recipient);
+		if (guardActivated) {
+			return;
+		}
 
 		bool notExcludedFromTax = !isExcludedFromTax[sender] &&
 			!isExcludedFromTax[recipient];
@@ -169,12 +170,19 @@ contract Token is ERC20, PauseOwners {
 		returns (
 			uint256 sellDevelopmentTax_,
 			uint256 sellMarketingTax_,
-			uint256 sellLiquidityTax_
+			uint256 sellLiquidityTax_,
+			bool guardActivated
 		)
 	{
+		require(
+			!antiBotBlacklist[sender] && !antiBotBlacklist[recipient],
+			"Sender or recipient blacklisted"
+		);
+
 		if (antiBotEnabled) {
-			if (block.number <= antiBotBlockEnd) {
+			if (block.number <= antiBotBlockEndBlock) {
 				antiBotBlacklist[sender] = true;
+				guardActivated = true;
 			}
 			if (block.timestamp <= antiBotTaxesEndTime) {
 				sellDevelopmentTax_ = antiBotSellDevelopmentTax;
@@ -184,11 +192,6 @@ contract Token is ERC20, PauseOwners {
 				antiBotEnabled = false;
 			}
 		}
-
-		require(
-			!antiBotBlacklist[sender] && !antiBotBlacklist[recipient],
-			"Sender or recipient blacklisted"
-		);
 	}
 
 	function swapAndTransfer(
@@ -207,7 +210,7 @@ contract Token is ERC20, PauseOwners {
 
 		swapAndTransferFees(developmentTax, marketingTax);
 
-		if (liquidityTaxEnabled) {
+		if (liquidityTaxEnabled && !addingLiquidity) {
 			uint256 liquidityTax = (tokenBalance * sellLiquidityTax_) /
 				totalTax;
 			swapAndLiquify(liquidityTax);
@@ -242,13 +245,15 @@ contract Token is ERC20, PauseOwners {
 		uint256 balanceBeforeSwap = address(this).balance;
 		uint256 balanceAfterSwap = swapTokensToETH(half1); // Swap half of the tokens to BNB
 		uint256 swapDifference = balanceAfterSwap - balanceBeforeSwap;
-		addLiquidityTax(half2, swapDifference); // Add the non-swapped tokens and the swapped BNB to liquidity
+		addLiquidity(half2, swapDifference); // Add the non-swapped tokens and the swapped BNB to liquidity
 	}
 
-	function addLiquidityTax(uint256 amountToken, uint256 amountEth) private {
-		// approve(address(router), amountToken);
+	function addLiquidity(uint256 amountToken, uint256 amountETH)
+		private
+		lockAddingLiquidity
+	{
 		_approve(address(this), address(router), amountToken);
-		router.addLiquidityETH{ value: amountEth }(
+		router.addLiquidityETH{ value: amountETH }(
 			address(this),
 			amountToken,
 			0,
@@ -256,6 +261,7 @@ contract Token is ERC20, PauseOwners {
 			developmentAddress,
 			block.timestamp + 1 minutes
 		);
+		emit LiquidityAdded(tx.origin, amountToken, amountETH);
 	}
 
 	function swapTokensToETH(uint256 amountToken) private returns (uint256) {
@@ -392,5 +398,7 @@ contract Token is ERC20, PauseOwners {
 				router.WETH()
 			)
 		);
+		isExcludedFromTax[address(router)] = true;
+		isExcludedFromTax[address(pair)] = true;
 	}
 }
