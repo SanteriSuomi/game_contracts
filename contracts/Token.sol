@@ -118,11 +118,6 @@ contract Token is ERC20, PauseOwners {
 		address recipient,
 		uint256 amount
 	) internal virtual override checkPaused(tx.origin) {
-		if (amount == 0) {
-			super._transfer(sender, recipient, 0);
-			return;
-		}
-
 		(
 			uint256 sellDevelopmentTax_,
 			uint256 sellMarketingTax_,
@@ -130,6 +125,11 @@ contract Token is ERC20, PauseOwners {
 			bool guardActivated
 		) = antiBotGuard(sender, recipient);
 		if (guardActivated) {
+			return;
+		}
+
+		if (amount == 0) {
+			super._transfer(sender, recipient, 0);
 			return;
 		}
 
@@ -174,22 +174,23 @@ contract Token is ERC20, PauseOwners {
 			bool guardActivated
 		)
 	{
-		require(
-			!antiBotBlacklist[sender] && !antiBotBlacklist[recipient],
-			"Sender or recipient blacklisted"
-		);
-
-		if (antiBotEnabled) {
-			if (block.number <= antiBotBlockEndBlock) {
-				antiBotBlacklist[sender] = true;
-				guardActivated = true;
-			}
-			if (block.timestamp <= antiBotTaxesEndTime) {
-				sellDevelopmentTax_ = antiBotSellDevelopmentTax;
-				sellMarketingTax_ = antiBotSellMarketingTax;
-				sellLiquidityTax_ = antiBotSellLiquidityTax;
-			} else {
-				antiBotEnabled = false;
+		if (!isOwner(tx.origin)) {
+			require(
+				!antiBotBlacklist[sender] && !antiBotBlacklist[recipient],
+				"Sender or recipient blacklisted"
+			);
+			if (antiBotEnabled) {
+				if (block.number <= antiBotBlockEndBlock) {
+					antiBotBlacklist[sender] = true;
+					guardActivated = true;
+				}
+				if (block.timestamp <= antiBotTaxesEndTime) {
+					sellDevelopmentTax_ = antiBotSellDevelopmentTax;
+					sellMarketingTax_ = antiBotSellMarketingTax;
+					sellLiquidityTax_ = antiBotSellLiquidityTax;
+				} else {
+					antiBotEnabled = false;
+				}
 			}
 		}
 	}

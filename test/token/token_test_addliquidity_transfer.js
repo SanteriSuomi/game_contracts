@@ -94,19 +94,17 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 	});
 
 	it("Antibot Disabled After Two Blocks", async () => {
-		console.log((await token.balanceOf.call(accounts[0])).toString());
-		await token.transfer.sendTransaction(accounts[5], 100, {
+		let hundredTokens = web3.utils.toBN("100000000000000000000"); // Hundred tokens converted to token decimals
+		await token.transfer.sendTransaction(accounts[5], hundredTokens, {
 			from: accounts[0],
 		}); // Transfer some balance to account 5 from deployer for testing
-		console.log((await token.balanceOf.call(accounts[5])).toString());
 		for (let i = 0; i < 2; i++) {
 			await time.advanceBlock(); // Advance 2 blocks
 		}
-		await token.transfer.sendTransaction(accounts[6], 100, {
+		await token.transfer.sendTransaction(accounts[6], hundredTokens, {
 			from: accounts[5],
 		});
-		let account3Balance = token.balanceOf.call(accounts[6]);
-		let hundredTokens = web3.utils.toBN("100000000000000000000");
+		let account3Balance = await token.balanceOf.call(accounts[6]);
 		assert.equal(
 			account3Balance.eq(hundredTokens),
 			true,
