@@ -8,52 +8,73 @@ contract Owners {
 		address indexed owner,
 		uint256 indexed timestamp
 	);
+
 	event OwnerRemoved(
 		address indexed remover,
 		address indexed removed,
 		uint256 indexed timestamp
 	);
 
-	mapping(address => bool) private _ownerMap;
-	address[] private _ownerList;
+	event OwnershipRenounced();
 
-	function isOwner(address owner) public view returns (bool) {
-		return _ownerMap[owner];
-	}
+	bool public renounced;
 
-	function getOwners() external view returns (address[] memory) {
-		return _ownerList;
-	}
+	address private masterOwner;
+	mapping(address => bool) private ownerMap;
+	address[] private ownerList;
 
 	constructor() {
 		require(msg.sender != address(0), "Can't initialize with zero address");
-		_ownerMap[msg.sender] = true;
-		_ownerList.push(msg.sender);
+
+		masterOwner = msg.sender;
+		ownerMap[msg.sender] = true;
+		ownerList.push(msg.sender);
 	}
 
 	modifier onlyOwners() {
-		require(_ownerMap[msg.sender], "Caller is not an owner");
+		require(!renounced, "Ownership renounced");
+		require(ownerMap[msg.sender], "Caller is not an owner");
 		_;
 	}
 
+	function isOwner(address owner) public view returns (bool) {
+		return ownerMap[owner];
+	}
+
+	function getOwners() external view returns (address[] memory) {
+		return ownerList;
+	}
+
 	function addOwner(address owner) public onlyOwners {
-		_ownerMap[owner] = true;
-		_ownerList.push(owner);
+		ownerMap[owner] = true;
+		ownerList.push(owner);
 		emit OwnerAdded(msg.sender, owner, block.timestamp);
 	}
 
 	function removeOwner(address owner) public onlyOwners {
-		require(_ownerMap[owner], "Address is not an owner");
-		for (uint256 i = 0; i < _ownerList.length; i++) {
-			if (_ownerList[i] == owner) {
-				_ownerMap[owner] = false;
-				for (uint256 j = i; j < _ownerList.length - 1; j++) {
-					_ownerList[i] = _ownerList[i + 1];
+		require(ownerMap[owner], "Address is not an owner");
+		require(msg.sender != masterOwner, "Master owner can't be removed");
+
+		for (uint256 i = 0; i < ownerList.length; i++) {
+			if (ownerList[i] == owner) {
+				ownerMap[owner] = false;
+				for (uint256 j = i; j < ownerList.length - 1; j++) {
+					ownerList[i] = ownerList[i + 1];
 				}
-				_ownerList.pop();
+				ownerList.pop();
 				emit OwnerRemoved(msg.sender, owner, block.timestamp);
 				break;
 			}
 		}
+	}
+
+	function renounceOwnership() external {
+		require(
+			msg.sender == masterOwner,
+			"Only master owner can renounce ownership"
+		);
+
+		renounced = true;
+		emit OwnershipRenounced();
 	}
 }

@@ -2,6 +2,10 @@ const NFT = artifacts.require("NFT");
 const Token = artifacts.require("Token");
 
 contract("NFT Test Compound", async (accounts) => {
+	if (process.env.NETWORK === "local_fork") {
+		return;
+	}
+
 	let nft;
 	let token;
 

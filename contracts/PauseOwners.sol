@@ -5,7 +5,7 @@ pragma solidity >=0.4.22 <0.9.0;
 import "./Owners.sol";
 
 contract PauseOwners is Owners {
-	bool public isPaused = false;
+	bool public isPaused;
 
 	modifier checkPaused(address address_) {
 		if (!isOwner(address_)) {
@@ -14,7 +14,7 @@ contract PauseOwners is Owners {
 		_;
 	}
 
-	function setIsPaused(bool newPaused) public onlyOwners {
-		isPaused = newPaused;
+	function setIsPaused(bool isPaused_) public onlyOwners {
+		isPaused = isPaused_;
 	}
 }

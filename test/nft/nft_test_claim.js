@@ -3,6 +3,10 @@ const Token = artifacts.require("Token");
 const time = require("@openzeppelin/test-helpers").time;
 
 contract("NFT Test Claim", async (accounts) => {
+	if (process.env.NETWORK === "local_fork") {
+		return;
+	}
+
 	let nft;
 	let token;
 

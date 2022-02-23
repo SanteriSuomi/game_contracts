@@ -36,14 +36,14 @@ module.exports = {
 		bscscan: process.env.API_KEY,
 	},
 	networks: {
-		local: {
-			// Development network (local ganache, ethereum)
+		local_fork: {
+			// Development network (forked ethereum mainnet)
 			host: "127.0.0.1",
 			port: 8545,
 			network_id: "1",
 		},
-		local_2: {
-			// Development network (local ganache, ethereum)
+		local_fake: {
+			// Development network (local ganache ethereum)
 			host: "127.0.0.1",
 			port: 7545,
 			network_id: "5777",

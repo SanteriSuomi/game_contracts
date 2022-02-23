@@ -27,11 +27,10 @@ contract Token is ERC20, PauseOwners {
 	mapping(address => bool) antiBotBlacklist;
 
 	bool public liquidityTaxEnabled = true;
+	bool private addingLiquidity;
 
 	uint256 private minBalanceToSwapAndTransfer;
 	bool private inSwapAndTransfer;
-
-	bool private addingLiquidity;
 
 	uint256 public sellDevelopmentTax = 4;
 	uint256 public sellMarketingTax = 4;
@@ -54,7 +53,6 @@ contract Token is ERC20, PauseOwners {
 		ERC20("Token", "TKN")
 	{
 		developmentAddress = payable(msg.sender);
-		addOwner(developmentAddress);
 		_mint(developmentAddress, 3333 * 10**decimals()); // For adding liquidity and team tokens
 		_mint(gameAddress_, 3333 * 10**decimals()); // Used as game rewards
 		_mint(nftAddress_, 3333 * 10**decimals()); // Used as NFT rewards
@@ -84,10 +82,13 @@ contract Token is ERC20, PauseOwners {
 		);
 		require(
 			allowance(msg.sender, address(this)) >= amountToken,
-			"Not enough allowance"
+			"Not enough allowance given to the contract"
 		);
+
+		_approve(address(this), routerAddress, amountToken);
+		_approve(msg.sender, routerAddress, amountToken);
 		super._transfer(msg.sender, address(this), amountToken);
-		approve(routerAddress, amountToken);
+
 		addingLiquidity = true;
 		router.addLiquidityETH{ value: msg.value }(
 			address(this),
@@ -112,12 +113,12 @@ contract Token is ERC20, PauseOwners {
 		address recipient,
 		uint256 amount
 	) internal virtual override checkPaused(tx.origin) {
-		if (addingLiquidity) {
-			// Liquidity transfer from development address
-			_approve(sender, msg.sender, amount);
-			super._transfer(sender, recipient, amount);
-			return;
-		}
+		// if (addingLiquidity) {
+		// 	// Liquidity transfer from development address
+		// 	_approve(sender, msg.sender, amount);
+		// 	super._transfer(sender, recipient, amount);
+		// 	return;
+		// }
 
 		if (amount == 0) {
 			super._transfer(sender, recipient, 0);
