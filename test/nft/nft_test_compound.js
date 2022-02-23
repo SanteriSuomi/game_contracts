@@ -37,6 +37,7 @@ contract("NFT Test Compound", async (accounts) => {
 	it("Can Compound To Max Level", async () => {
 		await nft.compound.sendTransaction(0, 1000, {
 			from: accounts[0],
+			gas: "500000",
 		});
 		let nftData = await nft.getNFTData.call(0);
 		assert.equal(nftData[0], 10);

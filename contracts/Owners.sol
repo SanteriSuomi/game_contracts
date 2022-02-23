@@ -55,6 +55,7 @@ contract Owners {
 		require(ownerMap[owner], "Address is not an owner");
 		require(msg.sender != masterOwner, "Master owner can't be removed");
 
+		uint256 lengthBefore = ownerList.length;
 		for (uint256 i = 0; i < ownerList.length; i++) {
 			if (ownerList[i] == owner) {
 				ownerMap[owner] = false;
@@ -66,6 +67,11 @@ contract Owners {
 				break;
 			}
 		}
+		uint256 lengthAfter = ownerList.length;
+		require( // Sanity check
+			lengthAfter < lengthBefore,
+			"Something went wrong removing owners"
+		);
 	}
 
 	function renounceOwnership() external {

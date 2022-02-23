@@ -6,6 +6,7 @@ const time = require("@openzeppelin/test-helpers").time;
 const truffleAssert = require("truffle-assertions");
 
 contract("Token Test Add Liquidity And Transfer", async (accounts) => {
+	let router;
 	let token;
 	let pairAbi;
 	let wethAddress;
@@ -28,7 +29,7 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 			fs.readFileSync(path.resolve(__dirname, "../../abi/pair_abi.json"))
 		);
 
-		const router = new web3.eth.Contract(
+		router = new web3.eth.Contract(
 			routerAbi,
 			"0x7a250d5630b4cf539739df2c5dacb4c659f2488d"
 		);
@@ -57,12 +58,12 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 
 	it("Can Add Liquidity", async () => {
 		await token.addLiquidity.sendTransaction(
-			web3.utils.toBN("10000000000000000000"),
+			web3.utils.toBN("2000000000000000000000"),
 			{
 				from: accounts[0],
 				value: "10000000000000000000",
 			}
-		); // Attempt to add 10 tokens and 10 ether to liquidity
+		); // Attempt to add 2000 tokens and 10 ether to liquidity
 
 		const pairAddress = await factory.methods
 			.getPair(token.address, wethAddress)
@@ -76,9 +77,8 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 		const reserve1 = web3.utils.toBN(reserves.reserve1);
 		const zero = web3.utils.toBN("0");
 		assert.equal(
-			reserve0.gt(zero) && reserve1.gt(zero) && reserve0.eq(reserve1),
-			true,
-			"Reserves are not equal or either of the reserves are zero"
+			reserve0.gt(zero) && reserve1.gt(zero) && reserve0.gt(reserve1),
+			true
 		);
 	});
 
@@ -112,6 +112,24 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 			account3Balance.eq(hundredTokens),
 			true,
 			"Transfer should not go through (balance before and after are the same) and address blacklisted"
+		);
+	});
+
+	it("Can Buy Through Router", async () => {
+		let buyAmount = web3.utils.toBN("1000000000000000000"); // 1 ether
+		let deadline = (await time.latest()) + 120; // Two minutes
+		let tokenPath = [wethAddress, token.address];
+		await router.methods
+			.swapExactETHForTokens(0, tokenPath, accounts[0], deadline)
+			.send({
+				value: buyAmount,
+				from: accounts[0],
+				gas: "5000000",
+			});
+		let balanceAfter = await token.balanceOf.call(accounts[0]);
+		assert(
+			balanceAfter.gt(web3.utils.toBN("180000000000000000000")),
+			"Balance after swap should be more than 180 tokens"
 		);
 	});
 });
