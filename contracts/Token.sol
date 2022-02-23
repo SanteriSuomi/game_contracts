@@ -78,6 +78,7 @@ contract Token is ERC20, PauseOwners {
 	}
 
 	modifier lockAddingLiquidity() {
+		require(!addingLiquidity, "Currently adding liquidity");
 		addingLiquidity = true;
 		_;
 		addingLiquidity = false;
@@ -85,12 +86,15 @@ contract Token is ERC20, PauseOwners {
 
 	receive() external payable {} // Must be defined so the contract is able to receive ETH from swaps
 
-	function addLiquidity(uint256 amountToken) external payable onlyOwners {
+	function addLiquidity(uint256 amountToken)
+		external
+		payable
+		onlyOwners
+		lockAddingLiquidity
+	{
 		// Add initial liquidity and enabled the "anti-bot" feature
-		require(!addingLiquidity, "Currently adding liquidity");
 		address routerAddress = address(router);
 		require(routerAddress != address(0), "Router not set yet");
-		amountToken *= (10**decimals());
 		require(
 			balanceOf(msg.sender) >= amountToken,
 			"Sender does not have enough token balance"
@@ -99,10 +103,8 @@ contract Token is ERC20, PauseOwners {
 			allowance(msg.sender, address(this)) >= amountToken,
 			"Not enough allowance given to the contract"
 		);
-
 		_approve(msg.sender, routerAddress, amountToken);
 		super._transfer(msg.sender, address(this), amountToken);
-
 		addLiquidity(amountToken, msg.value);
 		if (!antiBotRanOnce) {
 			antiBotEnabled = true;
@@ -249,10 +251,7 @@ contract Token is ERC20, PauseOwners {
 		addLiquidity(half2, swapDifference); // Add the non-swapped tokens and the swapped BNB to liquidity
 	}
 
-	function addLiquidity(uint256 amountToken, uint256 amountETH)
-		private
-		lockAddingLiquidity
-	{
+	function addLiquidity(uint256 amountToken, uint256 amountETH) private {
 		_approve(address(this), address(router), amountToken);
 		router.addLiquidityETH{ value: amountETH }(
 			address(this),

@@ -56,10 +56,13 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 	});
 
 	it("Can Add Liquidity", async () => {
-		await token.addLiquidity.sendTransaction(10, {
-			from: accounts[0],
-			value: "10000000000000000000",
-		}); // Attempt to add 10 tokens and 10 ether to liquidity
+		await token.addLiquidity.sendTransaction(
+			web3.utils.toBN("10000000000000000000"),
+			{
+				from: accounts[0],
+				value: "10000000000000000000",
+			}
+		); // Attempt to add 10 tokens and 10 ether to liquidity
 
 		const pairAddress = await factory.methods
 			.getPair(token.address, wethAddress)
