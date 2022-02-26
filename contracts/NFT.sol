@@ -4,6 +4,7 @@ pragma solidity >=0.4.22 <0.9.0;
 
 import "./PauseOwners.sol";
 import "./Token.sol";
+import "./Rewards.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
@@ -26,6 +27,7 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 	uint256 public rewardDivisor = 690000000; // Divisor variable for affecting token generation rate
 
 	Token private token;
+	Rewards private rewards;
 
 	Counters.Counter private tokenIds;
 
@@ -124,30 +126,42 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		emit Compounded(msg.sender, finalAmountToken, block.timestamp);
 	}
 
+	function updateTokenUri(
+		uint256 tokenId,
+		uint256 level,
+		uint256 birthDate,
+		uint256 lockedAmount
+	) private {
+		_setTokenURI(
+			tokenId,
+			string(
+				abi.encodePacked(
+					"level=",
+					level.toString(),
+					"&birthDate=",
+					birthDate.toString(),
+					"&lockedAmount=",
+					lockedAmount.toString()
+				)
+			)
+		);
+	}
+
 	function claimReward(uint256 tokenId) public checkPaused(msg.sender) {
-		require(_exists(tokenId), "Token ID does not exist");
+		uint256 amountReward = getRewardAmount(tokenId);
 		require(
 			ownerOf(tokenId) == msg.sender,
 			"Sender does not own this token"
 		);
-		uint256 amountReward = getReward(tokenId);
 		if (amountReward > 0) {
 			nftData[tokenId].lastClaimedDate = block.timestamp;
-			require(
-				token.balanceOf(address(this)) >= amountReward,
-				"Not enough contract token balance to claim"
-			);
-			token.approve(address(this), amountReward);
-			require(
-				token.transferFrom(address(this), msg.sender, amountReward),
-				"Token transfer failed"
-			);
+			rewards.withdraw(msg.sender, amountReward);
 			emit Claimed(msg.sender, amountReward, block.timestamp);
 		}
 	}
 
-	function getReward(uint256 tokenId) public view returns (uint256) {
-		require(_exists(tokenId), "This token ID does not exist");
+	function getRewardAmount(uint256 tokenId) public view returns (uint256) {
+		require(_exists(tokenId), "Token ID does not exist");
 		NFTData storage data = nftData[tokenId];
 		uint256 timeSinceLastClaim = block.timestamp - data.lastClaimedDate;
 		return calculateReward(timeSinceLastClaim, data.level);
@@ -210,8 +224,12 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		rewardDivisor = newRewardDivisor;
 	}
 
-	function setTokenAddress(address newTokenAddress) external onlyOwners {
-		token = Token(payable(newTokenAddress));
+	function setAddresses(address tokenAddress, address rewardsAddress)
+		external
+		onlyOwners
+	{
+		token = Token(payable(tokenAddress));
+		rewards = Rewards(rewardsAddress);
 	}
 
 	function setBaseUri(string memory newBaseURI) external onlyOwners {
@@ -220,27 +238,6 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 
 	function totalSupply() public view override returns (uint256) {
 		return tokenIds.current();
-	}
-
-	function updateTokenUri(
-		uint256 tokenId,
-		uint256 level,
-		uint256 birthDate,
-		uint256 lockedAmount
-	) private {
-		_setTokenURI(
-			tokenId,
-			string(
-				abi.encodePacked(
-					"level=",
-					level.toString(),
-					"&birthDate=",
-					birthDate.toString(),
-					"&lockedAmount=",
-					lockedAmount.toString()
-				)
-			)
-		);
 	}
 
 	function _baseURI() internal view override returns (string memory) {

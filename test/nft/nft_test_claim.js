@@ -23,9 +23,9 @@ contract("NFT Test Claim", async (accounts) => {
 			from: accounts[0],
 		});
 		await time.increase(3600);
-		let rewardsAfter = await nft.getReward.call(0);
+		let rewardsAfter = await nft.getRewardAmount.call(0);
 		assert(
-			rewardsAfter > web3.utils.toBN("0"),
+			rewardsAfter > web3.utils.toBN("1"),
 			"Reward not greater than 0"
 		);
 	});

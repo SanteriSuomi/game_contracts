@@ -57,7 +57,7 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 	});
 
 	it("Can Add Liquidity", async () => {
-		await token.addLiquidity.sendTransaction(
+		await token.addInitialLiquidity.sendTransaction(
 			web3.utils.toBN("2000000000000000000000"),
 			{
 				from: accounts[0],
@@ -128,9 +128,10 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 				gas: "5000000",
 			});
 		let balanceAfter = await token.balanceOf.call(accounts[0]);
+		let difference = balanceAfter - balanceBefore;
 		assert(
-			balanceAfter
-				.minus(balanceBefore)
+			web3.utils
+				.toBN(difference)
 				.gt(web3.utils.toBN("180322180000000000000")),
 			"Balance after swap should be more than 180 tokens"
 		);

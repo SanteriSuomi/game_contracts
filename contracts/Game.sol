@@ -10,11 +10,11 @@ contract Game is PauseOwners {
 	NFT private nft;
 	Token private token;
 
-	function setNftAddress(address newNftAddress) external onlyOwners {
-		nft = NFT(newNftAddress);
-	}
-
-	function setTokenAddress(address newTokenAddress) external onlyOwners {
-		token = Token(payable(newTokenAddress));
+	function setAddresses(address nftAddress, address tokenAddress)
+		external
+		onlyOwners
+	{
+		nft = NFT(payable(nftAddress));
+		token = Token(payable(tokenAddress));
 	}
 }
