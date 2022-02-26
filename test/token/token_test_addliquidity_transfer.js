@@ -119,6 +119,7 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 		let buyAmount = web3.utils.toBN("1000000000000000000"); // 1 ether
 		let deadline = (await time.latest()) + 120; // Two minutes
 		let tokenPath = [wethAddress, token.address];
+		let balanceBefore = await token.balanceOf.call(accounts[0]);
 		await router.methods
 			.swapExactETHForTokens(0, tokenPath, accounts[0], deadline)
 			.send({
@@ -128,7 +129,9 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 			});
 		let balanceAfter = await token.balanceOf.call(accounts[0]);
 		assert(
-			balanceAfter.gt(web3.utils.toBN("180000000000000000000")),
+			balanceAfter
+				.minus(balanceBefore)
+				.gt(web3.utils.toBN("180322180000000000000")),
 			"Balance after swap should be more than 180 tokens"
 		);
 	});
