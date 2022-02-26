@@ -341,13 +341,15 @@ contract Token is ERC20, PauseOwners {
 		_approve(msg.sender, routerAddress, amountToken);
 		super._transfer(msg.sender, address(this), amountToken);
 		addLiquidity(msg.value, amountToken);
-		if (!antiBotRanOnce) {
-			antiBotEnabled = true;
-			antiBotRanOnce = true;
-			antiBotTaxesEndTime = block.timestamp + antiBotTaxesTimeInSeconds;
-			antiBotBlockEndBlock = block.number + antiBotBlockTime;
-			setIsPaused(false);
-		}
+	}
+
+	function activateTradeWithAntibot() external onlyOwners {
+		require(!antiBotRanOnce, "Antibot has already been ran");
+		antiBotEnabled = true;
+		antiBotRanOnce = true;
+		antiBotTaxesEndTime = block.timestamp + antiBotTaxesTimeInSeconds;
+		antiBotBlockEndBlock = block.number + antiBotBlockTime;
+		setIsPaused(false);
 	}
 
 	function setAntiBotSellTaxes(

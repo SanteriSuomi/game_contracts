@@ -83,6 +83,10 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 	});
 
 	it("Antibot Enabled", async () => {
+		await token.activateTradeWithAntibot.sendTransaction({
+			from: accounts[0],
+		}); // Activate antibot and unpause trade
+
 		let balanceBefore = await token.balanceOf.call(accounts[1]);
 		await token.transfer.sendTransaction(accounts[2], 100, {
 			from: accounts[1],
