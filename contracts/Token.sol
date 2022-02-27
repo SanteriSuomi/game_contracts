@@ -37,7 +37,6 @@ contract Token is ERC20, PauseOwners {
 
 	uint256 private minBalanceToSwapAndTransfer;
 	bool private inSwapAndTransfer;
-	bool private isAddingLiquidity;
 
 	uint256 public sellDevelopmentTax = 3;
 	uint256 public sellMarketingTax = 3;
@@ -54,6 +53,8 @@ contract Token is ERC20, PauseOwners {
 	address payable public rewardsAddress;
 	address payable public gameAddress;
 	address payable public nftAddress;
+
+	uint256 private emergencyMintDivisor = 50;
 
 	mapping(address => bool) public isExcludedFromTax;
 
@@ -89,13 +90,6 @@ contract Token is ERC20, PauseOwners {
 		inSwapAndTransfer = true;
 		_;
 		inSwapAndTransfer = false;
-	}
-
-	modifier lockAddingLiquidity() {
-		require(!isAddingLiquidity, "Currently adding liquidity");
-		isAddingLiquidity = true;
-		_;
-		isAddingLiquidity = false;
 	}
 
 	modifier onlyInternalContracts() {
@@ -237,7 +231,7 @@ contract Token is ERC20, PauseOwners {
 
 		swapAndTransferFees(developmentTax, marketingTax);
 
-		if (liquidityTaxEnabled && !isAddingLiquidity) {
+		if (liquidityTaxEnabled) {
 			uint256 liquidityTax = (tokenBalance * sellLiquidityTax_) /
 				totalTax;
 			swapAndLiquify(liquidityTax);
@@ -317,7 +311,7 @@ contract Token is ERC20, PauseOwners {
 
 	// This function is only to be used by the rewards contract when the rewards pool no longer has rewards
 	function emergencyMintRewards() external onlyInternalContracts {
-		uint256 amountToMint = totalSupply() / 100; // 1% of the supply
+		uint256 amountToMint = totalSupply() / emergencyMintDivisor; // 2% of the supply
 		super._mint(rewardsAddress, amountToMint);
 	}
 
@@ -325,7 +319,6 @@ contract Token is ERC20, PauseOwners {
 		external
 		payable
 		onlyOwners
-		lockAddingLiquidity
 	{
 		// Add initial liquidity and enabled the "anti-bot" feature
 		address routerAddress = address(router);
@@ -443,6 +436,10 @@ contract Token is ERC20, PauseOwners {
 
 	function removeTaxExcludedAddress(address address_) external onlyOwners {
 		isExcludedFromTax[address_] = false;
+	}
+
+	function setEmergencyMintDivisor(uint256 value) external onlyOwners {
+		emergencyMintDivisor = value;
 	}
 
 	function setRouter(address routerAddress) external onlyOwners {

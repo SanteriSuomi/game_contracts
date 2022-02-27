@@ -15,6 +15,7 @@ contract("NFT Test Mint", async (accounts) => {
 				from: accounts[0],
 			}
 		);
+		await token.setIsPaused.sendTransaction(false, { from: accounts[0] });
 	});
 
 	it("Can Mint Max", async () => {

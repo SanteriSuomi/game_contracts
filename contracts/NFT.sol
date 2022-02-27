@@ -26,6 +26,10 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 	uint256 public tokensPerLevel = 100; // Amount of tokens needed to upgrade an NFT (one level)
 	uint256 public rewardDivisor = 690000000; // Divisor variable for affecting token generation rate
 
+	bool public presaleEnded;
+	bool private presalePaused = true;
+	uint256 private presaleSupply = 500;
+
 	Token private token;
 	Rewards private rewards;
 
@@ -47,9 +51,28 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		// Other in-game properties here and API configured to show them
 	}
 
-	constructor() ERC721("NFT", "NFT") {}
+	constructor() ERC721("NFT", "NFT") {
+		setIsPaused(true);
+	}
 
-	function mint(address to, uint256 amount) public checkPaused(msg.sender) {
+	function mintPresale(address to, uint256 amount) external {
+		require(!presaleEnded, "Presale has ended already");
+		require(!presalePaused, "Presale currently paused");
+		if (totalSupply() >= presaleSupply) {
+			presaleEnded = true;
+			return;
+		}
+		require(
+			amountMinted[to] + amount <= addressMax,
+			"Max mint exceeded for this address"
+		);
+		require(
+			amountMinted[to] + amount <= presaleSupply,
+			"This mint would exceed presale supply cap"
+		);
+	}
+
+	function mint(address to, uint256 amount) external checkPaused(msg.sender) {
 		require(totalSupply() < supplyMax, "Max supply has been reached");
 		require(
 			amountMinted[to] + amount <= addressMax,
@@ -90,7 +113,7 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 	}
 
 	function compound(uint256 tokenId, uint256 amountToken)
-		public
+		external
 		checkPaused(msg.sender)
 	{
 		amountToken *= 10**token.decimals();
@@ -173,7 +196,7 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 	}
 
 	function calculateReward(uint256 time, uint256 level)
-		public
+		private
 		view
 		returns (uint256)
 	{
@@ -208,6 +231,11 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		supplyMax = newMax;
 	}
 
+	function setPresaleSupply(uint256 newSupply) external onlyOwners {
+		require(!presaleEnded, "Presale has ended already");
+		presaleSupply = newSupply;
+	}
+
 	function setMintPrice(uint256 newPrice) external onlyOwners {
 		mintPrice = newPrice;
 	}
@@ -232,8 +260,8 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		rewards = Rewards(rewardsAddress);
 	}
 
-	function setBaseUri(string memory newBaseURI) external onlyOwners {
-		nftBaseURI = newBaseURI;
+	function setBaseUri(string memory baseURI_) external onlyOwners {
+		nftBaseURI = baseURI_;
 	}
 
 	function totalSupply() public view override returns (uint256) {
