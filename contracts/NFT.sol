@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// @boughtthetopkms on Telegram
 
 pragma solidity >=0.4.22 <0.9.0;
 
@@ -40,7 +41,7 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		"https://slimekeeper-web-dev.herokuapp.com/api/nft/data?";
 
 	mapping(address => uint256) private amountMinted;
-	mapping(uint256 => NFTData) private nftData; // Store NFT Data for invidividual token
+	mapping(uint256 => NFTData) private nftData; // Store NFT Data for individual token
 
 	// Represents in-game properties
 	struct NFTData {
@@ -185,7 +186,9 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 					"&birthDate=",
 					data.birthDate.toString(),
 					"&lockedAmount=",
-					data.lockedAmount.toString()
+					data.lockedAmount.toString(),
+					"&lastClaimedDate=",
+					data.lastClaimedDate.toString()
 				)
 			)
 		);

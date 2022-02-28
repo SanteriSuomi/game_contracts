@@ -34,8 +34,11 @@ contract("NFT Test Claim", async (accounts) => {
 		let balanceBefore = await token.balanceOf(accounts[0]);
 		await nft.claimReward.sendTransaction(0);
 		let balanceAfter = await token.balanceOf(accounts[0]);
+		let difference = balanceAfter - balanceBefore;
 		assert(
-			balanceAfter > balanceBefore,
+			web3.utils
+				.toBN(difference)
+				.gt(web3.utils.toBN("499990000000000000000")),
 			"Balance after is not more than before"
 		);
 	});

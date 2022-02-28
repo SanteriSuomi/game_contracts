@@ -100,20 +100,20 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 		);
 	});
 
-	it("Antibot Disabled After Two Blocks", async () => {
+	it("Antibot Blacklist Disabled After Two Blocks", async () => {
 		let hundredTokens = web3.utils.toBN("100000000000000000000"); // Hundred tokens converted to token decimals
 		await token.transfer.sendTransaction(accounts[5], hundredTokens, {
 			from: accounts[0],
 		}); // Transfer some balance to account 5 from deployer for testing
 		for (let i = 0; i < 2; i++) {
-			await time.advanceBlock(); // Advance 2 blocks
+			await time.advanceBlock(); // Advance 3 blocks
 		}
 		await token.transfer.sendTransaction(accounts[6], hundredTokens, {
 			from: accounts[5],
 		});
-		let account3Balance = await token.balanceOf.call(accounts[6]);
+		let balance = await token.balanceOf.call(accounts[6]);
 		assert.equal(
-			account3Balance.eq(hundredTokens),
+			balance.eq(hundredTokens),
 			true,
 			"Transfer should not go through (balance before and after are the same) and address blacklisted"
 		);
