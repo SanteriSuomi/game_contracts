@@ -24,12 +24,12 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 	uint256 public mintPrice = 100; // Mint price of one NFT in tokens
 	uint256 public maxTokenLevel = 10; // Amount of levels an individual NFT can be upgraded
 	uint256 public tokensPerLevel = 100; // Amount of tokens needed to upgrade an NFT (one level)
-	uint256 public rewardDivisor = 690000000; // Divisor variable for affecting token generation rate
+	uint256 public rewardRatePercentage = 500; // Reward rate in percentage per year (APR)
 
 	bool public presaleEnded;
 	bool public presalePaused = true;
-	uint256 public presaleSupply = 500;
-	uint256 public presalePrice = 500000000000000000; // 0.5
+	uint256 public presaleSupply = 100;
+	uint256 public presalePrice = 0.5 ether;
 
 	Token private token;
 	Rewards private rewards;
@@ -75,20 +75,12 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		uint256 totalMintPrice = amount * presalePrice;
 		require(msg.value >= totalMintPrice, "Not enough ether sent");
 		createNFT(to, amount);
-		uint256 excess = msg.value - totalMintPrice; // Refund excess ether
+		uint256 excess = msg.value - totalMintPrice;
 		if (excess > 0) {
+			// Refund excess ether
 			(bool refundSuccess, ) = msg.sender.call{ value: excess }("");
 			require(refundSuccess, "Refund unsuccessfull");
 		}
-	}
-
-	function claimPresaleETH() external onlyOwners {
-		// Allows contract owner to retrieve presale ether
-		require(presaleEnded, "Presale not ended yet");
-		(bool claimSuccess, ) = msg.sender.call{ value: address(this).balance }(
-			""
-		);
-		require(claimSuccess, "Something went wrong claiming");
 	}
 
 	function mint(address to, uint256 amount) external checkPaused(msg.sender) {
@@ -130,13 +122,14 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		for (uint256 i = 0; i < amount; i++) {
 			uint256 currTokenId = tokenIds.current();
 			_safeMint(to, currTokenId);
-			updateTokenUri(currTokenId, birthDate, 1, 0);
-			nftData[currTokenId] = NFTData({
-				level: 0,
+			NFTData memory data = NFTData({
+				level: 1,
 				birthDate: birthDate,
 				lockedAmount: 0,
 				lastClaimedDate: birthDate
 			});
+			nftData[currTokenId] = data;
+			updateTokenUri(currTokenId, data);
 			tokenIds.increment();
 		}
 		amountMinted[to] += amount;
@@ -160,7 +153,9 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		NFTData storage data = nftData[tokenId];
 		require(data.level < maxTokenLevel, "This NFT is already max level");
 		uint256 tokensPerLevelDecimals = tokensPerLevel * 10**token.decimals();
-		uint256 newLocked = data.lockedAmount + amountToken;
+		uint256 newLocked = data.lockedAmount +
+			amountToken +
+			(data.level == 1 ? tokensPerLevelDecimals : 0);
 		uint256 newLevel = newLocked / tokensPerLevelDecimals;
 		uint256 excessAmount = 0;
 		if (newLevel >= maxTokenLevel) {
@@ -171,7 +166,7 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 			data.lockedAmount = newLocked;
 			data.level = newLevel;
 		}
-		updateTokenUri(tokenId, data.level, data.birthDate, data.lockedAmount);
+		updateTokenUri(tokenId, data);
 		uint256 finalAmountToken = amountToken - excessAmount;
 		require(
 			token.transferFrom(msg.sender, address(rewards), finalAmountToken),
@@ -180,22 +175,17 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		emit Compounded(msg.sender, finalAmountToken, block.timestamp);
 	}
 
-	function updateTokenUri(
-		uint256 tokenId,
-		uint256 level,
-		uint256 birthDate,
-		uint256 lockedAmount
-	) private {
+	function updateTokenUri(uint256 tokenId, NFTData memory data) private {
 		_setTokenURI(
 			tokenId,
 			string(
 				abi.encodePacked(
 					"level=",
-					level.toString(),
+					data.level.toString(),
 					"&birthDate=",
-					birthDate.toString(),
+					data.birthDate.toString(),
 					"&lockedAmount=",
-					lockedAmount.toString()
+					data.lockedAmount.toString()
 				)
 			)
 		);
@@ -221,17 +211,22 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		return calculateReward(timeSinceLastClaim, data.level);
 	}
 
-	// Return the approximate APR considering certain level
-	function approxAPR(uint256 level) external view returns (uint256) {
-		return (calculateReward(365 days, level) * 100) / token.totalSupply();
-	}
-
 	function calculateReward(uint256 time, uint256 level)
-		private
+		public
 		view
 		returns (uint256)
 	{
-		return (time * (level + 1) * token.totalSupply()) / rewardDivisor;
+		time = (time * 10**token.decimals()) / 365 days;
+		return level * rewardRatePercentage * time;
+	}
+
+	function claimPresaleETH() external onlyOwners {
+		// Allows contract owner to retrieve presale ether
+		require(presaleEnded, "Presale not ended yet");
+		(bool claimSuccess, ) = msg.sender.call{ value: address(this).balance }(
+			""
+		);
+		require(claimSuccess, "Something went wrong claiming");
 	}
 
 	function getNFTData(uint256 tokenId)
@@ -254,44 +249,47 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		);
 	}
 
-	function setAddressMax(uint256 newMax) external onlyOwners {
-		addressMax = newMax;
+	function setAddressMax(uint256 addressMax_) external onlyOwners {
+		addressMax = addressMax_;
 	}
 
-	function setSupplyMax(uint256 newMax) external onlyOwners {
-		supplyMax = newMax;
+	function setSupplyMax(uint256 supplyMax_) external onlyOwners {
+		supplyMax = supplyMax_;
 	}
 
-	function setMintPrice(uint256 newPrice) external onlyOwners {
-		mintPrice = newPrice;
+	function setMintPrice(uint256 mintPrice_) external onlyOwners {
+		mintPrice = mintPrice_;
 	}
 
-	function setMaxTokenLevel(uint256 newLevel) external onlyOwners {
-		mintPrice = newLevel;
+	function setMaxTokenLevel(uint256 maxTokenLevel_) external onlyOwners {
+		maxTokenLevel = maxTokenLevel_;
 	}
 
-	function setTokensPerLevel(uint256 newTokensPerLevel) external onlyOwners {
-		tokensPerLevel = newTokensPerLevel;
+	function setTokensPerLevel(uint256 tokensPerLevel_) external onlyOwners {
+		tokensPerLevel = tokensPerLevel_;
 	}
 
-	function setRewardDivisor(uint256 newRewardDivisor) external onlyOwners {
-		rewardDivisor = newRewardDivisor;
+	function setRewardRatePercentage(uint256 rewardRatePercentage_)
+		external
+		onlyOwners
+	{
+		rewardRatePercentage = rewardRatePercentage_;
 	}
 
-	function setPresalePaused(bool paused) external onlyOwners {
-		presalePaused = paused;
+	function setPresaleEnded(bool presaleEnded_) external onlyOwners {
+		presaleEnded = presaleEnded_;
 	}
 
-	function setPresaleEnded(bool ended) external onlyOwners {
-		presaleEnded = ended;
+	function setPresalePaused(bool presalePaused_) external onlyOwners {
+		presalePaused = presalePaused_;
 	}
 
-	function setPresaleSupply(uint256 supply) external onlyOwners {
-		presaleSupply = supply;
+	function setPresaleSupply(uint256 presaleSupply_) external onlyOwners {
+		presaleSupply = presaleSupply_;
 	}
 
-	function setPresalePrice(uint256 price) external onlyOwners {
-		presalePrice = price;
+	function setPresalePrice(uint256 presalePrice_) external onlyOwners {
+		presalePrice = presalePrice_;
 	}
 
 	function setAddresses(address tokenAddress, address rewardsAddress)

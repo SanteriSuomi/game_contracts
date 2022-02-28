@@ -23,7 +23,7 @@ contract("NFT Test Compound", async (accounts) => {
 			from: accounts[0],
 		});
 		let nftData = await nft.getNFTData.call(0);
-		assert.equal(nftData[0], 1);
+		assert.equal(nftData[0], 2);
 	});
 
 	it("Can Compound Four More Levels", async () => {
@@ -31,7 +31,7 @@ contract("NFT Test Compound", async (accounts) => {
 			from: accounts[0],
 		});
 		let nftData = await nft.getNFTData.call(0);
-		assert.equal(nftData[0], 5);
+		assert.equal(nftData[0], 6);
 	});
 
 	it("Can Compound To Max Level", async () => {

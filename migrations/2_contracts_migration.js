@@ -5,6 +5,14 @@ const Rewards = artifacts.require("Rewards");
 
 module.exports = async function (deployer, network, accounts) {
 	process.env.NETWORK = network;
+
+	if (network === "testnet") {
+		// Deploy NFT contract
+		await deployer.deploy(NFT, { from: accounts[0] });
+		// const nftContract = await NFT.deployed();
+		return;
+	}
+
 	// Deploy NFT contract
 	await deployer.deploy(NFT, { from: accounts[0] });
 	const nftContract = await NFT.deployed();

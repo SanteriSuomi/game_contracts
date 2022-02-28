@@ -18,15 +18,15 @@ contract("NFT Test Claim", async (accounts) => {
 		);
 	});
 
-	it("NFT Generates Some Rewards", async () => {
+	it("NFT Generates Correct Rewards", async () => {
 		await nft.mint.sendTransaction(accounts[0], 1, {
 			from: accounts[0],
 		});
-		await time.increase(3600);
+		await time.increase(31536000); // 1 year
 		let rewardsAfter = await nft.getRewardAmount.call(0);
 		assert(
-			rewardsAfter > web3.utils.toBN("1"),
-			"Reward not greater than 0"
+			rewardsAfter.eq(web3.utils.toBN("500000000000000000000")), // Considering 500% apr, in 1 year should generate 500 tokens for every 100 tokens invested
+			"Reward does not equal 500 tokens"
 		);
 	});
 

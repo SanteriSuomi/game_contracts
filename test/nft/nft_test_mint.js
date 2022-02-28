@@ -53,7 +53,7 @@ contract("NFT Test Mint", async (accounts) => {
 
 	it("NFT Data Created Correctly After Minting", async () => {
 		let nftDataAtIndex1 = await nft.getNFTData.call(0);
-		assert.equal(nftDataAtIndex1[0], 0);
+		assert.equal(nftDataAtIndex1[0], 1);
 	});
 
 	it("NFT Total Supply Is Correct After Minting", async () => {
