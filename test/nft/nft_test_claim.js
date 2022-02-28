@@ -42,7 +42,10 @@ contract("NFT Test Claim", async (accounts) => {
 
 	it("Previous Rewards Claim Was Successful", async () => {
 		let balanceBefore = await token.balanceOf(accounts[0]);
-		await nft.claimReward.sendTransaction(0);
+		await nft.claimReward.sendTransaction(0, {
+			from: accounts[0],
+			gas: "5000000",
+		});
 		let balanceAfter = await token.balanceOf(accounts[0]);
 		let difference = balanceAfter.sub(balanceBefore);
 		assert(

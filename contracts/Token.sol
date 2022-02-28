@@ -19,10 +19,10 @@ contract Token is ERC20, PauseOwners {
 
 	uint256 public immutable MAX_TOTAL_FEE = 25; // We can never surpass this total fee
 
-	bool public antiBotEnabled;
+	bool private antiBotEnabled;
 	bool private antiBotRanOnce; // We can only run antibot once, when initial liquidity is added
-	uint256 public antiBotTaxesEndTime; // Time when antibot taxes end
-	uint256 public antiBotBlockEndBlock; // Block when antibot blacklister no longer works
+	uint256 private antiBotTaxesEndTime; // Time when antibot taxes end
+	uint256 private antiBotBlockEndBlock; // Block when antibot blacklister no longer works
 	uint256 private antiBotTaxesTimeInSeconds = 3600;
 	uint256 private antiBotBlockTime = 2;
 
@@ -35,18 +35,18 @@ contract Token is ERC20, PauseOwners {
 
 	bool public liquidityTaxEnabled = true;
 
-	uint256 private minBalanceToSwapAndTransfer;
+	uint256 private minBalanceForSwapAndTransfer;
 	bool private inSwapAndTransfer;
 
 	uint256 public sellDevelopmentTax = 3;
 	uint256 public sellMarketingTax = 3;
-	uint256 public sellLiquidityTax = 2;
 	uint256 public sellRewardsTax = 4;
+	uint256 public sellLiquidityTax = 2;
 
 	uint256 public buyDevelopmentTax = 2;
 	uint256 public buyMarketingTax = 2;
-	uint256 public buyLiquidityTax = 1;
 	uint256 public buyRewardsTax = 2;
+	uint256 public buyLiquidityTax = 1;
 
 	address payable public developmentAddress;
 	address payable public marketingAddress;
@@ -54,9 +54,9 @@ contract Token is ERC20, PauseOwners {
 	address payable public gameAddress;
 	address payable public nftAddress;
 
-	uint256 private emergencyMintDivisor = 50;
-
 	mapping(address => bool) public isExcludedFromTax;
+
+	uint256 private emergencyMintDivisor = 50;
 
 	IUniswapV2Router02 private router;
 	IUniswapV2Pair private pair;
@@ -70,18 +70,18 @@ contract Token is ERC20, PauseOwners {
 	) ERC20("Token", "TKN") {
 		setIsPaused(true); // Pause trading at the beginning until liquidity is added
 		developmentAddress = payable(msg.sender);
+		marketingAddress = payable(marketingAddress_);
+		rewardsAddress = payable(rewardsAddress_);
 		gameAddress = payable(gameAddress_);
 		nftAddress = payable(nftAddress_);
-		rewardsAddress = payable(rewardsAddress_);
-		marketingAddress = payable(marketingAddress_);
 		_mint(developmentAddress, 3333 * 10**decimals()); // For adding liquidity and team tokens
 		_mint(rewardsAddress, 6667 * 10**decimals()); // Game + NFT rewards
-		minBalanceToSwapAndTransfer = totalSupply() / 1000; // If contract balance is minimum 0.1% of total supply, swap to BNB and transfer fees
+		minBalanceForSwapAndTransfer = totalSupply() / 1000; // If contract balance is minimum 0.1% of total supply, swap to BNB and transfer fees
 		isExcludedFromTax[developmentAddress] = true;
-		isExcludedFromTax[gameAddress] = true;
-		isExcludedFromTax[nftAddress] = true;
 		isExcludedFromTax[marketingAddress] = true;
 		isExcludedFromTax[rewardsAddress] = true;
+		isExcludedFromTax[gameAddress] = true;
+		isExcludedFromTax[nftAddress] = true;
 		isExcludedFromTax[address(this)] = true;
 		createRouterPair(routerAddress_);
 	}
@@ -123,7 +123,7 @@ contract Token is ERC20, PauseOwners {
 		uint256 tokenBalance = balanceOf(address(this));
 		if (
 			!inSwapAndTransfer &&
-			tokenBalance >= minBalanceToSwapAndTransfer &&
+			tokenBalance >= minBalanceForSwapAndTransfer &&
 			recipient == address(pair) && // Is a sell
 			notExcludedFromTax
 		) {
@@ -311,7 +311,7 @@ contract Token is ERC20, PauseOwners {
 
 	// This function is only to be used by the rewards contract when the rewards pool no longer has rewards
 	function emergencyMintRewards() external onlyInternalContracts {
-		uint256 amountToMint = totalSupply() / emergencyMintDivisor; // 2% of the supply
+		uint256 amountToMint = totalSupply() / emergencyMintDivisor; // Default: 2% of the supply
 		super._mint(rewardsAddress, amountToMint);
 	}
 
@@ -438,8 +438,8 @@ contract Token is ERC20, PauseOwners {
 		isExcludedFromTax[address_] = false;
 	}
 
-	function setEmergencyMintDivisor(uint256 value) external onlyOwners {
-		emergencyMintDivisor = value;
+	function setEmergencyMintDivisor(uint256 divisor) external onlyOwners {
+		emergencyMintDivisor = divisor;
 	}
 
 	function setRouter(address routerAddress) external onlyOwners {

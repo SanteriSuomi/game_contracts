@@ -1,5 +1,6 @@
 const NFT = artifacts.require("NFT");
 const Token = artifacts.require("Token");
+const truffleAssert = require("truffle-assertions");
 
 contract("NFT Test Mint", async (accounts) => {
 	let nft;
@@ -15,6 +16,18 @@ contract("NFT Test Mint", async (accounts) => {
 				from: accounts[0],
 			}
 		);
+	});
+
+	it("Can't Mint When Paused", async () => {
+		await token.setIsPaused.sendTransaction(true, { from: accounts[0] });
+		await truffleAssert.reverts(
+			nft.mint.sendTransaction(accounts[1], 1, {
+				from: accounts[1],
+			}),
+			null,
+			"Transaction did not revert"
+		);
+
 		await token.setIsPaused.sendTransaction(false, { from: accounts[0] });
 	});
 
@@ -49,7 +62,7 @@ contract("NFT Test Mint", async (accounts) => {
 	});
 
 	it("NFT Total Supply Is Correct After Minting Once More From Different Address", async () => {
-		await token.setIsPaused.sendTransaction(false, { from: accounts[0] });
+		await nft.setIsPaused.sendTransaction(false, { from: accounts[0] });
 		await token.approve.sendTransaction(
 			nft.address,
 			web3.utils.toBN("5000000000000000000000000000000000000"),

@@ -75,7 +75,7 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 
 		const reserve0 = web3.utils.toBN(reserves.reserve0);
 		const reserve1 = web3.utils.toBN(reserves.reserve1);
-		const zero = web3.utils.toBN("0");
+		const zero = web3.utils.toBN(0);
 		assert.equal(
 			reserve0.gt(zero) && reserve1.gt(zero) && reserve0.gt(reserve1),
 			true
