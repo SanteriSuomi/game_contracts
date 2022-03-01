@@ -18,6 +18,7 @@ contract Token is ERC20, PauseOwners {
 		uint256 amountETH,
 		uint256 amountToken
 	);
+	event Blacklisted(address address_, uint256 block, uint256 timestamp);
 
 	uint256 public immutable MAX_TOTAL_FEE = 2500; // We can never surpass this total fee
 
@@ -60,7 +61,7 @@ contract Token is ERC20, PauseOwners {
 
 	mapping(address => bool) public isExcludedFromTax;
 
-	uint256 private emergencyMintDivisor = 50;
+	uint256 private emergencyMintAmount = 100000000000000000000; // 1% of initial supply
 
 	IUniswapV2Router02 private router;
 	IUniswapV2Pair private pair;
@@ -93,11 +94,6 @@ contract Token is ERC20, PauseOwners {
 		inSwapAndTransfer = true;
 		_;
 		inSwapAndTransfer = false;
-	}
-
-	modifier onlyInternalContracts() {
-		require(msg.sender == rewardsAddress);
-		_;
 	}
 
 	function _transfer(
@@ -182,6 +178,7 @@ contract Token is ERC20, PauseOwners {
 				if (block.number <= antiBotBlockEndBlock) {
 					antiBotBlacklist[sender] = true;
 					guardActivated = true;
+					emit Blacklisted(sender, block.number, block.timestamp);
 				} else if (block.timestamp <= antiBotTaxesEndTime) {
 					uint256 timePassed = 1 +
 						block.timestamp -
@@ -225,7 +222,7 @@ contract Token is ERC20, PauseOwners {
 		// Helper function which scales a value to a range and reverses it
 		uint256 x, // Value to scale
 		uint256 minX, // Minimum value of x
-		uint256 maxX, // Maximum value of X
+		uint256 maxX, // Maximum value of x
 		uint256 a, // Range start
 		uint256 b // Range end
 	) private pure returns (uint256) {
@@ -360,9 +357,9 @@ contract Token is ERC20, PauseOwners {
 	}
 
 	// This function is only to be used by the rewards contract when the rewards pool no longer has rewards
-	function emergencyMintRewards() external onlyInternalContracts {
-		uint256 amountToMint = totalSupply() / emergencyMintDivisor; // Default: 2% of the supply
-		super._mint(rewardsAddress, amountToMint);
+	function emergencyMintRewards() external {
+		require(msg.sender == rewardsAddress, "Address not authorized");
+		super._mint(rewardsAddress, emergencyMintAmount);
 	}
 
 	function addInitialLiquidity(uint256 amountToken)
@@ -506,11 +503,11 @@ contract Token is ERC20, PauseOwners {
 		isExcludedFromTax[address_] = false;
 	}
 
-	function setEmergencyMintDivisor(uint256 emergencyMintDivisor_)
+	function setEmergencyMintAmount(uint256 emergencyMintAmount_)
 		external
 		onlyOwners
 	{
-		emergencyMintDivisor = emergencyMintDivisor_;
+		emergencyMintAmount = emergencyMintAmount_;
 	}
 
 	function setMinBalanceForSwapAndTransfer(

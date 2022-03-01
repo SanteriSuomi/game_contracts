@@ -57,17 +57,9 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		setIsPaused(true);
 	}
 
-	modifier checkPresaleState() {
+	function mintPresale(address to, uint256 amount) external payable {
 		require(!presaleEnded, "Presale has ended already");
 		require(!presalePaused, "Presale currently paused");
-		_;
-	}
-
-	function mintPresale(address to, uint256 amount)
-		external
-		payable
-		checkPresaleState
-	{
 		if (totalSupply() >= presaleSupply) {
 			presaleEnded = true;
 			return;
@@ -80,7 +72,7 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		if (excess > 0) {
 			// Refund excess ether
 			(bool refundSuccess, ) = msg.sender.call{ value: excess }("");
-			require(refundSuccess, "Refund unsuccessfull");
+			require(refundSuccess, "Refund unsuccessful");
 		}
 	}
 
@@ -214,13 +206,13 @@ contract NFT is ERC721, ERC721Enumerable, ERC721URIStorage, PauseOwners {
 		return calculateReward(timeSinceLastClaim, data.level);
 	}
 
-	function calculateReward(uint256 time, uint256 level)
+	function calculateReward(uint256 timeInSeconds, uint256 tokenLevel)
 		public
 		view
 		returns (uint256)
 	{
-		time = (time * 10**token.decimals()) / 365 days;
-		return level * rewardRatePercentage * time;
+		uint256 timeInYears = (timeInSeconds * 10**token.decimals()) / 365 days;
+		return tokenLevel * rewardRatePercentage * timeInYears;
 	}
 
 	function claimPresaleETH() external onlyOwners {

@@ -7,24 +7,20 @@ import "./PauseOwners.sol";
 import "./Token.sol";
 
 contract Rewards is PauseOwners {
+	event Withdraw(address to, uint256 amount, address caller);
+
 	Token token;
 	address gameAddress;
 	address nftAddress;
 
-	modifier onlyInternalContracts() {
+	function withdraw(address to, uint256 amountToken) external {
 		require(msg.sender == gameAddress || msg.sender == nftAddress);
-		_;
-	}
-
-	function withdraw(address to, uint256 amountToken)
-		external
-		onlyInternalContracts
-	{
 		while (token.balanceOf(address(this)) < amountToken) {
 			// Mints new supply for as long as needed
 			token.emergencyMintRewards();
 		}
 		require(token.transfer(to, amountToken), "Token withdraw failed");
+		emit Withdraw(to, amountToken, msg.sender);
 	}
 
 	function setAddresses(

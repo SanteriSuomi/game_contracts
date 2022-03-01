@@ -11,11 +11,11 @@ contract Owners {
 
 	event OwnerRemoved(
 		address indexed remover,
-		address indexed removed,
+		address indexed owner,
 		uint256 indexed timestamp
 	);
 
-	event OwnershipRenounced();
+	event OwnershipRenounced(uint256 timestamp);
 
 	bool public renounced;
 
@@ -81,6 +81,6 @@ contract Owners {
 		);
 
 		renounced = true;
-		emit OwnershipRenounced();
+		emit OwnershipRenounced(block.timestamp);
 	}
 }
