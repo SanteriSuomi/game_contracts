@@ -30,10 +30,10 @@ contract Token is ERC20, PauseOwners {
 	uint256 private antiBotBlockTimeInBlocks = 2;
 	uint256 private antiBotMaxTX = 100000000000000000000; // 1% percent of the supply
 
-	uint256 private antiBotSellDevelopmentTax = 900;
-	uint256 private antiBotSellMarketingTax = 900;
-	uint256 private antiBotSellRewardsTax = 400;
-	uint256 private antiBotSellLiquidityTax = 300;
+	uint256 public antiBotSellDevelopmentTax = 900;
+	uint256 public antiBotSellMarketingTax = 900;
+	uint256 public antiBotSellRewardsTax = 400;
+	uint256 public antiBotSellLiquidityTax = 300;
 
 	mapping(address => bool) public antiBotBlacklist;
 
@@ -218,6 +218,7 @@ contract Token is ERC20, PauseOwners {
 		}
 	}
 
+	// 300, 900
 	function scaleToRangeAndReverse(
 		uint256 x, // Value to scale
 		uint256 minX, // Minimum value of x
@@ -225,7 +226,7 @@ contract Token is ERC20, PauseOwners {
 		uint256 a, // Range start
 		uint256 b // Range end
 	) private pure returns (uint256) {
-		return (a + b) - ((b - a) * ((x * minX) / (maxX - minX)) + a);
+		return (a + b) - ((b - a) * ((x - minX) / (maxX - minX)) + a);
 	}
 
 	function takeFees(

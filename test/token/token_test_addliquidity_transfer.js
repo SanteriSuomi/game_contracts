@@ -11,6 +11,7 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 	let pairAbi;
 	let wethAddress;
 	let factory;
+	let pair;
 
 	before(async () => {
 		token = await Token.deployed();
@@ -39,6 +40,11 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 			.factory()
 			.call({ from: accounts[0] });
 		factory = new web3.eth.Contract(factoryAbi, factoryAddress);
+
+		const pairAddress = await factory.methods
+			.getPair(token.address, wethAddress)
+			.call({ from: accounts[0] });
+		pair = new web3.eth.Contract(pairAbi, pairAddress);
 	});
 
 	it("Can't Transfer As Trading Paused", async () => {
@@ -65,11 +71,7 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 			}
 		); // Attempt to add 2000 tokens and 10 ether to liquidity
 
-		const pairAddress = await factory.methods
-			.getPair(token.address, wethAddress)
-			.call({ from: accounts[0] });
-		const pair = new web3.eth.Contract(pairAbi, pairAddress);
-		const reserves = await pair.methods
+		let reserves = await pair.methods
 			.getReserves()
 			.call({ from: accounts[0] });
 
@@ -139,5 +141,40 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 				.gt(web3.utils.toBN("180322180000000000000")),
 			"Balance after swap should be more than 180 tokens"
 		);
+	});
+
+	it("Taxes Are Approximately Correct When Selling", async () => {
+		let sellAmount = web3.utils.toBN("100000000000000000000"); // Hundred tokens converted to token decimals
+		await token.transfer.sendTransaction(accounts[7], sellAmount, {
+			from: accounts[0],
+		}); // Transfer some balance to account 5 from deployer for testing
+		await token.approve.sendTransaction(
+			router.options.address,
+			sellAmount,
+			{
+				from: accounts[7],
+			}
+		); // Transfer some balance to account 5 from deployer for testing
+		let deadline = (await time.latest()) + 120; // Two minutes
+		let tokenPath = [token.address, wethAddress];
+		let balanceBefore = await token.balanceOf(accounts[9]); // Marketing account
+		await router.methods
+			.swapExactTokensForETHSupportingFeeOnTransferTokens(
+				sellAmount,
+				0, // Any amount
+				tokenPath,
+				accounts[7],
+				deadline
+			)
+			.send({
+				from: accounts[7],
+				gas: "5000000",
+			});
+		let marketingTax = await token.antiBotSellMarketingTax.call();
+		let balanceAfter = await token.balanceOf(accounts[9]);
+		let difference = balanceAfter - balanceBefore;
+		console.log(marketingTax.toString());
+		console.log(balanceAfter.toString());
+		console.log(difference.toString());
 	});
 });
