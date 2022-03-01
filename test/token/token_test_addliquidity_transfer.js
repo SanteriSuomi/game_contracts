@@ -1,13 +1,14 @@
 const Token = artifacts.require("Token");
-const { web3 } = require("@openzeppelin/test-helpers/src/setup");
+const Rewards = artifacts.require("Rewards");
 const fs = require("fs");
 const path = require("path");
 const time = require("@openzeppelin/test-helpers").time;
 const truffleAssert = require("truffle-assertions");
 
 contract("Token Test Add Liquidity And Transfer", async (accounts) => {
-	let router;
 	let token;
+	let rewards;
+	let router;
 	let pairAbi;
 	let wethAddress;
 	let factory;
@@ -15,6 +16,7 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 
 	before(async () => {
 		token = await Token.deployed();
+		rewards = await Rewards.deployed();
 
 		const routerAbi = JSON.parse(
 			fs.readFileSync(
@@ -85,10 +87,12 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 	});
 
 	it("Antibot Enabled", async () => {
+		await token.transfer.sendTransaction(accounts[1], 100, {
+			from: accounts[0],
+		});
 		await token.activateTradeWithAntibot.sendTransaction({
 			from: accounts[0],
 		}); // Activate antibot and unpause trade
-
 		let balanceBefore = await token.balanceOf.call(accounts[1]);
 		await token.transfer.sendTransaction(accounts[2], 100, {
 			from: accounts[1],
@@ -112,6 +116,7 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 		}
 		await token.transfer.sendTransaction(accounts[6], hundredTokens, {
 			from: accounts[5],
+			gas: "5000000",
 		});
 		let balance = await token.balanceOf.call(accounts[6]);
 		assert.equal(
@@ -143,38 +148,62 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 		);
 	});
 
-	it("Taxes Are Approximately Correct When Selling", async () => {
+	it("Taxes Are Correct When Selling And Antibot Is Activated", async () => {
+		await testTaxes(7, "25000000000000000000");
+	});
+
+	it("Taxes Are Correct When Selling And Antibot Is Deactivated", async () => {
+		await time.increase(4000);
+		await testTaxes(8, "12000000000000000000");
+	});
+
+	async function testTaxes(accountNumber, mustEqualTax) {
 		let sellAmount = web3.utils.toBN("100000000000000000000"); // Hundred tokens converted to token decimals
-		await token.transfer.sendTransaction(accounts[7], sellAmount, {
-			from: accounts[0],
-		}); // Transfer some balance to account 5 from deployer for testing
+		await token.transfer.sendTransaction(
+			accounts[accountNumber],
+			web3.utils.toBN("100000000000000000000"),
+			{
+				from: accounts[0],
+			}
+		); // Transfer some balance to account 5 from deployer for testing
 		await token.approve.sendTransaction(
 			router.options.address,
 			sellAmount,
 			{
-				from: accounts[7],
+				from: accounts[accountNumber],
 			}
-		); // Transfer some balance to account 5 from deployer for testing
+		);
 		let deadline = (await time.latest()) + 120; // Two minutes
 		let tokenPath = [token.address, wethAddress];
-		let balanceBefore = await token.balanceOf(accounts[9]); // Marketing account
+		let rewardsAddressBalanceBefore = await token.balanceOf.call(
+			rewards.address
+		);
 		await router.methods
 			.swapExactTokensForETHSupportingFeeOnTransferTokens(
 				sellAmount,
 				0, // Any amount
 				tokenPath,
-				accounts[7],
+				accounts[accountNumber],
 				deadline
 			)
 			.send({
-				from: accounts[7],
+				from: accounts[accountNumber],
 				gas: "5000000",
 			});
-		let marketingTax = await token.antiBotSellMarketingTax.call();
-		let balanceAfter = await token.balanceOf(accounts[9]);
-		let difference = balanceAfter - balanceBefore;
-		console.log(marketingTax.toString());
-		console.log(balanceAfter.toString());
-		console.log(difference.toString());
-	});
+		let tokenAddressBalance = await token.balanceOf.call(token.address);
+		let rewardsAddressBalanceAfter = await token.balanceOf.call(
+			rewards.address
+		);
+		let rewardsAddressBalanceDifference = rewardsAddressBalanceAfter.sub(
+			rewardsAddressBalanceBefore
+		);
+		let mustEqualTaxBN = web3.utils.toBN(mustEqualTax);
+		let added = tokenAddressBalance.add(rewardsAddressBalanceDifference);
+		let decimalSub = web3.utils.toBN("10000000000000000000");
+		assert.equal(
+			added.gt(mustEqualTaxBN.sub(decimalSub)) &&
+				added.lt(mustEqualTaxBN.add(decimalSub)),
+			true
+		);
+	}
 });

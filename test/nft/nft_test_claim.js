@@ -24,10 +24,10 @@ contract("NFT Test Claim", async (accounts) => {
 		});
 		await time.increase(31536000); // 1 year
 		let rewardsAfter = await nft.getRewardAmount.call(0);
-		assert(
-			rewardsAfter.eq(web3.utils.toBN("500000000000000000000")), // Considering 500% apr, in 1 year should generate 500 tokens for every 100 tokens invested
-			"Reward does not equal 500 tokens"
-		);
+		assert.equal(
+			rewardsAfter.eq(web3.utils.toBN("500000000000000000000")),
+			true
+		); // Considering 500% apr, in 1 year should generate 500 tokens for every 100 tokens invested
 	});
 
 	it("Can Claim Rewards", async () => {

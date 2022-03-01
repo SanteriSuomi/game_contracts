@@ -39,7 +39,7 @@ contract Token is ERC20, PauseOwners {
 
 	bool public liquidityTaxEnabled = true;
 
-	uint256 private minBalanceForSwapAndTransfer;
+	uint256 private minBalanceForSwapAndTransfer = 10000000000000000000;
 	bool private inSwapAndTransfer;
 
 	uint256 public sellDevelopmentTax = 300;
@@ -80,7 +80,6 @@ contract Token is ERC20, PauseOwners {
 		nftAddress = payable(nftAddress_);
 		_mint(developmentAddress, 3333 * 10**decimals()); // For adding liquidity and team tokens
 		_mint(rewardsAddress, 6667 * 10**decimals()); // Game + NFT rewards
-		minBalanceForSwapAndTransfer = totalSupply() / 1000; // If contract balance is minimum 0.1% of total supply, swap to BNB and transfer fees
 		isExcludedFromTax[developmentAddress] = true;
 		isExcludedFromTax[marketingAddress] = true;
 		isExcludedFromTax[rewardsAddress] = true;
@@ -166,6 +165,10 @@ contract Token is ERC20, PauseOwners {
 			bool guardActivated
 		)
 	{
+		sellDevelopmentTax_ = sellDevelopmentTax;
+		sellMarketingTax_ = sellMarketingTax;
+		sellLiquidityTax_ = sellLiquidityTax;
+		sellRewardsTax_ = sellRewardsTax;
 		if (!isOwner(tx.origin)) {
 			require(
 				!antiBotBlacklist[sender] && !antiBotBlacklist[recipient],
@@ -179,9 +182,9 @@ contract Token is ERC20, PauseOwners {
 				if (block.number <= antiBotBlockEndBlock) {
 					antiBotBlacklist[sender] = true;
 					guardActivated = true;
-				}
-				if (block.timestamp <= antiBotTaxesEndTime) {
-					uint256 timePassed = block.timestamp -
+				} else if (block.timestamp <= antiBotTaxesEndTime) {
+					uint256 timePassed = 1 +
+						block.timestamp -
 						antiBotTaxesStartTime;
 					sellDevelopmentTax_ = scaleToRangeAndReverse(
 						timePassed,
@@ -218,8 +221,8 @@ contract Token is ERC20, PauseOwners {
 		}
 	}
 
-	// 300, 900
 	function scaleToRangeAndReverse(
+		// Helper function which scales a value to a range and reverses it
 		uint256 x, // Value to scale
 		uint256 minX, // Minimum value of x
 		uint256 maxX, // Maximum value of X
@@ -312,9 +315,9 @@ contract Token is ERC20, PauseOwners {
 		uint256 half1Token = amountToken / 2;
 		uint256 half2Token = amountToken - half1Token;
 		uint256 balanceBeforeSwapETH = address(this).balance;
-		uint256 balanceAfterSwapETH = swapTokensToETH(half1Token); // Swap half of the tokens to BNB
+		uint256 balanceAfterSwapETH = swapTokensToETH(half2Token); // Swap half of the tokens to BNB
 		uint256 swapDifferenceETH = balanceAfterSwapETH - balanceBeforeSwapETH;
-		addLiquidity(swapDifferenceETH, half2Token); // Add the non-swapped tokens and the swapped BNB to liquidity
+		addLiquidity(swapDifferenceETH, half1Token); // Add the non-swapped tokens and the swapped BNB to liquidity
 	}
 
 	function addLiquidity(uint256 amountETH, uint256 amountToken) private {
@@ -334,7 +337,6 @@ contract Token is ERC20, PauseOwners {
 		address[] memory path = new address[](2);
 		path[0] = address(this);
 		path[1] = router.WETH();
-		// approve(address(router), amountToken);
 		_approve(address(this), address(router), amountToken);
 		router.swapExactTokensForETHSupportingFeeOnTransferTokens(
 			amountToken,
@@ -355,7 +357,6 @@ contract Token is ERC20, PauseOwners {
 			)
 		);
 		isExcludedFromTax[address(router)] = true;
-		isExcludedFromTax[address(pair)] = true;
 	}
 
 	// This function is only to be used by the rewards contract when the rewards pool no longer has rewards
