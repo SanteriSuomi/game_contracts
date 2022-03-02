@@ -341,18 +341,22 @@ contract Token is ERC20, PauseOwners {
 		uint256 balanceBeforeSwapETH = address(this).balance;
 		uint256 balanceAfterSwapETH = swapTokensToETH(half2Token); // Swap half of the tokens to BNB
 		uint256 swapDifferenceETH = balanceAfterSwapETH - balanceBeforeSwapETH;
-		addLiquidity(swapDifferenceETH, half1Token); // Add the non-swapped tokens and the swapped BNB to liquidity
+		addLiquidity(swapDifferenceETH, half1Token, liquidityAddress); // Add the non-swapped tokens and the swapped BNB to liquidity
 		emit Liquified(swapDifferenceETH, half1Token);
 	}
 
-	function addLiquidity(uint256 amountETH, uint256 amountToken) private {
+	function addLiquidity(
+		uint256 amountETH,
+		uint256 amountToken,
+		address lpTokenAddress
+	) private {
 		_approve(address(this), address(router), amountToken);
 		router.addLiquidityETH{ value: amountETH }(
 			address(this),
 			amountToken,
 			0,
 			0,
-			liquidityAddress,
+			lpTokenAddress,
 			block.timestamp + 1 minutes
 		);
 		emit LiquidityAdded(tx.origin, amountETH, amountToken);
@@ -408,7 +412,7 @@ contract Token is ERC20, PauseOwners {
 		);
 		_approve(msg.sender, routerAddress, amountToken);
 		super._transfer(msg.sender, address(this), amountToken);
-		addLiquidity(msg.value, amountToken);
+		addLiquidity(msg.value, amountToken, msg.sender);
 	}
 
 	function activateTradeWithAntibot() external onlyOwners {
