@@ -166,10 +166,16 @@ contract Token is ERC20, PauseOwners {
 			bool guardActivated
 		)
 	{
+		require(
+			!antiBotBlacklist[sender] && !antiBotBlacklist[recipient],
+			"Sender or recipient blacklisted"
+		);
+
 		sellDevelopmentTax_ = sellDevelopmentTax;
 		sellMarketingTax_ = sellMarketingTax;
 		sellLiquidityTax_ = sellLiquidityTax;
 		sellRewardsTax_ = sellRewardsTax;
+
 		if (isOwner(tx.origin)) {
 			return (
 				sellDevelopmentTax_,
@@ -180,10 +186,6 @@ contract Token is ERC20, PauseOwners {
 			);
 		}
 
-		require(
-			!antiBotBlacklist[sender] && !antiBotBlacklist[recipient],
-			"Sender or recipient blacklisted"
-		);
 		if (antiBotEnabled) {
 			require(amount <= antiBotMaxTX, "Transaction exceeded max amount");
 			uint256 time = block.timestamp;
