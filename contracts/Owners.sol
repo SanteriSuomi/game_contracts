@@ -24,11 +24,15 @@ contract Owners {
 	address[] private ownerList;
 
 	constructor() {
-		require(msg.sender != address(0), "Can't initialize with zero address");
-
 		masterOwner = msg.sender;
 		ownerMap[msg.sender] = true;
 		ownerList.push(msg.sender);
+	}
+
+	modifier onlyMasterOwner() {
+		require(!renounced, "Ownership renounced");
+		require(msg.sender == masterOwner);
+		_;
 	}
 
 	modifier onlyOwners() {
@@ -37,33 +41,40 @@ contract Owners {
 		_;
 	}
 
-	function isOwner(address owner) public view returns (bool) {
-		return ownerMap[owner];
+	/// @notice Return whether given address is one of the owners of this contract
+	/// @param address_ Address to check
+	/// @return True/False
+	function isOwner(address address_) public view returns (bool) {
+		return ownerMap[address_];
 	}
 
+	/// @notice Get all addresses of current owners
+	/// @return List of owners
 	function getOwners() external view returns (address[] memory) {
 		return ownerList;
 	}
 
-	function addOwner(address owner) public onlyOwners {
-		ownerMap[owner] = true;
-		ownerList.push(owner);
-		emit OwnerAdded(msg.sender, owner, block.timestamp);
+	/// @notice Add a new owner, only the master owner can add
+	/// @param address_ Address to add
+	function addOwner(address address_) public onlyMasterOwner {
+		ownerMap[address_] = true;
+		ownerList.push(address_);
+		emit OwnerAdded(msg.sender, address_, block.timestamp);
 	}
 
-	function removeOwner(address owner) public onlyOwners {
-		require(ownerMap[owner], "Address is not an owner");
-		require(msg.sender != masterOwner, "Master owner can't be removed");
-
+	/// @notice Remove existing owner, only master owner can remove
+	/// @param address_ Address to remove
+	function removeOwner(address address_) public onlyMasterOwner {
+		require(ownerMap[address_], "Address is not an owner");
+		require(address_ != masterOwner, "Master owner can't be removed");
 		uint256 lengthBefore = ownerList.length;
 		for (uint256 i = 0; i < ownerList.length; i++) {
-			if (ownerList[i] == owner) {
-				ownerMap[owner] = false;
+			if (ownerList[i] == address_) {
+				ownerMap[address_] = false;
 				for (uint256 j = i; j < ownerList.length - 1; j++) {
 					ownerList[i] = ownerList[i + 1];
 				}
 				ownerList.pop();
-				emit OwnerRemoved(msg.sender, owner, block.timestamp);
 				break;
 			}
 		}
@@ -72,14 +83,17 @@ contract Owners {
 			lengthAfter < lengthBefore,
 			"Something went wrong removing owners"
 		);
+		emit OwnerRemoved(msg.sender, address_, block.timestamp);
 	}
 
-	function renounceOwnership() external {
+	/// @notice Let master owner renounce contract
+	/// @param check Requires "give" as a parameter to prevent accidental renouncing
+	function renounceOwnership(string memory check) external onlyMasterOwner {
+		string memory checkAgainst = "confirm";
 		require(
-			msg.sender == masterOwner,
-			"Only master owner can renounce ownership"
+			keccak256(bytes(check)) == keccak256(bytes(checkAgainst)),
+			"No renounce, you must give 'confirm' as a parameter"
 		);
-
 		renounced = true;
 		emit OwnershipRenounced(block.timestamp);
 	}

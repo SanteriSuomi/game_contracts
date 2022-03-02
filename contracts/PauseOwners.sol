@@ -14,6 +14,8 @@ contract PauseOwners is Owners {
 		_;
 	}
 
+	/// @notice Pause any functions which use checkPaused modifier
+	/// @param isPaused_ True to pause false to unpause
 	function setIsPaused(bool isPaused_) public onlyOwners {
 		isPaused = isPaused_;
 	}

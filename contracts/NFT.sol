@@ -24,9 +24,9 @@ contract NFT is ANFT {
 
 	uint256 public addressMax = 5; // Max NFTs per address
 	uint256 public supplyMax = 1000; // Max total supply cap
-	uint256 public mintPrice = 100; // Mint price of one NFT in tokens
+	uint256 public mintPrice = 100000000000000000000; // Mint price of one NFT in tokens
 	uint256 public maxTokenLevel = 10; // Amount of levels an individual NFT can be upgraded
-	uint256 public tokensPerLevel = 100; // Amount of tokens needed to upgrade an NFT (one level)
+	uint256 public tokensPerLevel = 100000000000000000000; // Amount of tokens needed to upgrade an NFT (one level)
 	uint256 public rewardRatePercentage = 500; // Reward rate in percentage per year (APR)
 
 	bool public presaleEnded;
@@ -48,11 +48,11 @@ contract NFT is ANFT {
 	// Represents in-game properties
 	struct NFTData {
 		uint256 level; // Current level of NFT
-		uint256 birthDate; // Date this NFT was minted
-		uint256 lockedAmount; // Amount of tokens currently locked in this NFT
-		uint256 lastClaimedDate; // Date last rewards were last claimed, if not claimed once, same as birth
+		uint256 date; // Date this NFT was minted
+		uint256 locked; // Amount of tokens currently locked in this NFT
+		uint256 claimed; // Date last rewards were last claimed, if not claimed once, same as birth
 
-		// Other in-game properties here and API configured to show them
+		// TO:DO other game-specific fields?
 	}
 
 	constructor() ERC721("NFT", "NFT") {
@@ -60,7 +60,6 @@ contract NFT is ANFT {
 	}
 
 	/// @notice Mint function for presale
-	/// @dev
 	/// @param to Address to mint to
 	/// @param amount Amount of NFTs to mint
 	function mintPresale(address to, uint256 amount) external payable {
@@ -82,10 +81,13 @@ contract NFT is ANFT {
 		}
 	}
 
+	/// @notice Mint NFT using tokens
+	/// @param to Address to mint to
+	/// @param amount Amount of NFTs to mint
 	function mint(address to, uint256 amount) external checkPaused(msg.sender) {
 		require(totalSupply() < supplyMax, "Max supply has been reached");
 		checkAmountMinted(to, amount, supplyMax);
-		uint256 totalMintPrice = amount * mintPrice * 10**token.decimals();
+		uint256 totalMintPrice = amount * mintPrice;
 		require(
 			token.balanceOf(msg.sender) >= totalMintPrice,
 			"Token balance too low"
@@ -97,7 +99,7 @@ contract NFT is ANFT {
 		createNFT(to, amount);
 		require(
 			token.transferFrom(msg.sender, address(rewards), totalMintPrice),
-			"Token payment failed"
+			"Token transfer failed"
 		);
 	}
 
@@ -117,29 +119,31 @@ contract NFT is ANFT {
 	}
 
 	function createNFT(address to, uint256 amount) private {
-		uint256 birthDate = block.timestamp;
+		uint256 time = block.timestamp;
 		for (uint256 i = 0; i < amount; i++) {
-			uint256 currTokenId = tokenIds.current();
-			_safeMint(to, currTokenId);
+			uint256 tokenId = tokenIds.current();
+			_safeMint(to, tokenId);
 			NFTData memory data = NFTData({
 				level: 1,
-				birthDate: birthDate,
-				lockedAmount: 0,
-				lastClaimedDate: birthDate
+				date: time,
+				locked: 0,
+				claimed: time
 			});
-			nftData[currTokenId] = data;
-			updateTokenUri(currTokenId, data);
+			nftData[tokenId] = data;
+			updateTokenUri(tokenId, data);
 			tokenIds.increment();
 		}
 		amountMinted[to] += amount;
-		emit Minted(to, amount, birthDate);
+		emit Minted(to, amount, time);
 	}
 
+	/// @notice Compound (lock) tokens in specific NFT and upgrades after every X amount of tokens compounded. Refunds excess if compounding over the max level
+	/// @param tokenId ID of the token to compound (must be owner of said tokens)
+	/// @param amountToken Amount of tokens to compound in the NFT
 	function compound(uint256 tokenId, uint256 amountToken)
 		external
 		checkPaused(msg.sender)
 	{
-		amountToken *= 10**token.decimals();
 		require(
 			token.balanceOf(msg.sender) >= amountToken,
 			"Token balance too low"
@@ -151,27 +155,27 @@ contract NFT is ANFT {
 		claimReward(tokenId); // Claim before compounding
 		NFTData storage data = nftData[tokenId];
 		require(data.level < maxTokenLevel, "This NFT is already max level");
-		uint256 tokensPerLevelDecimals = tokensPerLevel * 10**token.decimals();
-		uint256 newLocked = data.lockedAmount +
+		uint256 newLocked = data.locked +
 			amountToken +
-			(data.level == 1 ? tokensPerLevelDecimals : 0);
-		uint256 newLevel = newLocked / tokensPerLevelDecimals;
-		uint256 excessAmount = 0;
+			(data.level == 1 ? tokensPerLevel : 0);
+		uint256 newLevel = newLocked / tokensPerLevel;
+		uint256 amountExcess = 0;
 		if (newLevel >= maxTokenLevel) {
-			excessAmount = newLocked - (maxTokenLevel * tokensPerLevelDecimals);
-			data.lockedAmount = newLocked - excessAmount;
+			// If compounding amount excees max level
+			amountExcess = newLocked - (maxTokenLevel * tokensPerLevel);
+			data.locked = newLocked - amountExcess;
 			data.level = maxTokenLevel;
 		} else {
-			data.lockedAmount = newLocked;
+			data.locked = newLocked;
 			data.level = newLevel;
 		}
 		updateTokenUri(tokenId, data);
-		uint256 finalAmountToken = amountToken - excessAmount;
+		amountToken -= amountExcess;
 		require(
-			token.transferFrom(msg.sender, address(rewards), finalAmountToken),
-			"Token payment failed"
+			token.transferFrom(msg.sender, address(rewards), amountToken),
+			"Token transfer failed"
 		);
-		emit Compounded(msg.sender, finalAmountToken, block.timestamp);
+		emit Compounded(msg.sender, amountToken, block.timestamp);
 	}
 
 	function updateTokenUri(uint256 tokenId, NFTData memory data) private {
@@ -181,17 +185,19 @@ contract NFT is ANFT {
 				abi.encodePacked(
 					"level=",
 					data.level.toString(),
-					"&birthDate=",
-					data.birthDate.toString(),
-					"&lockedAmount=",
-					data.lockedAmount.toString(),
-					"&lastClaimedDate=",
-					data.lastClaimedDate.toString()
+					"&date=",
+					data.date.toString(),
+					"&locked=",
+					data.locked.toString(),
+					"&claimed=",
+					data.claimed.toString()
 				)
 			)
 		);
 	}
 
+	/// @notice Claim NFT rewards
+	/// @param tokenId ID of the NFT of whose rewards to claim
 	function claimReward(uint256 tokenId) public checkPaused(msg.sender) {
 		uint256 amountReward = getRewardAmount(tokenId);
 		require(
@@ -199,28 +205,36 @@ contract NFT is ANFT {
 			"Sender does not own this token"
 		);
 		if (amountReward > 0) {
-			nftData[tokenId].lastClaimedDate = block.timestamp;
+			nftData[tokenId].claimed = block.timestamp;
 			rewards.withdrawReward(msg.sender, amountReward);
 			emit Claimed(msg.sender, amountReward, block.timestamp);
 		}
 	}
 
+	/// @notice Check amount of claimable rewards for this token (this function does not claim them)
+	/// @param tokenId ID of the NFT of whose rewards to claim
+	/// @return Amount of rewards this NFT is entitled to claim
 	function getRewardAmount(uint256 tokenId) public view returns (uint256) {
 		require(_exists(tokenId), "Token ID does not exist");
 		NFTData storage data = nftData[tokenId];
-		uint256 timeSinceLastClaim = block.timestamp - data.lastClaimedDate;
+		uint256 timeSinceLastClaim = block.timestamp - data.claimed;
 		return calculateReward(timeSinceLastClaim, data.level);
 	}
 
-	function calculateReward(uint256 timeInSeconds, uint256 tokenLevel)
+	/// @notice Calculate how many rewards could get in some time (seconds)
+	/// @param time Time in seconds
+	/// @param tokenLvl Level of NFT
+	/// @return Amount of rewards this NFT is entitled to claim
+	function calculateReward(uint256 time, uint256 tokenLvl)
 		public
 		view
 		returns (uint256)
 	{
-		uint256 timeInYears = (timeInSeconds * 10**token.decimals()) / 365 days;
-		return tokenLevel * rewardRatePercentage * timeInYears;
+		time = (time * 10**token.decimals()) / 365 days; // Time in seconds to years
+		return tokenLvl * rewardRatePercentage * time;
 	}
 
+	/// @notice Allows team to claim presale money
 	function claimPresaleETH() external onlyOwners {
 		// Allows contract owner to retrieve presale ether
 		require(presaleEnded, "Presale not ended yet");
@@ -230,6 +244,9 @@ contract NFT is ANFT {
 		require(claimSuccess, "Something went wrong claiming");
 	}
 
+	/// @notice Return data for specific NFT
+	/// @param tokenId ID of the NFT
+	/// @return Return the data of NFT such as level, date of birth, locked token amount, last reward claim date
 	function getNFTData(uint256 tokenId)
 		external
 		view
@@ -242,12 +259,7 @@ contract NFT is ANFT {
 	{
 		require(_exists(tokenId), "This token ID does not exist");
 		NFTData storage data = nftData[tokenId];
-		return (
-			data.level,
-			data.birthDate,
-			data.lockedAmount,
-			data.lastClaimedDate
-		);
+		return (data.level, data.date, data.locked, data.claimed);
 	}
 
 	function setAddressMax(uint256 addressMax_) external onlyOwners {

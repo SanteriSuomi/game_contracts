@@ -18,7 +18,6 @@ contract Rewards is ARewards {
 	/// @notice Withdraw tokens from the pool
 	/// @param to Address to which tokens will be withdrawn to
 	/// @param amountToken Amount of tokens to withdraw
-	/// @dev Will mint tokens if rewards pool is empty. Only usable by in-game contracts
 	function withdrawReward(address to, uint256 amountToken) external override {
 		require(msg.sender == gameAddress || msg.sender == nftAddress);
 		while (token.balanceOf(address(this)) < amountToken) {

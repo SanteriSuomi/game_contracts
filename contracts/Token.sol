@@ -392,15 +392,13 @@ contract Token is AToken {
 		isExcludedFromTax[address(router)] = true;
 	}
 
-	/// @notice Mints new tokens only as emergency fallback if token reward dries out
-	/// @dev Can only be called by internal reward pool contract
+	/// @notice Mints new tokens but only in case of token reward pool drying out
 	function emergencyMint() external override {
 		require(msg.sender == rewardsAddress, "Address not authorized");
 		_mint(rewardsAddress, emergencyMintAmount);
 	}
 
 	/// @notice Add liquidity to the token
-	/// @dev To activate trading with antibot, use activateTradeWithAntibot after this
 	/// @param amountToken Amount of token to add to the LP pool pair
 	function addInitialLiquidity(uint256 amountToken)
 		external
@@ -423,8 +421,7 @@ contract Token is AToken {
 		initialLiquidityAdded = true;
 	}
 
-	/// @notice Activates trading along with antibot features
-	/// @dev Antibot features: max transaction size, linear diminishing taxes, two block blacklist. Can only be ran once
+	/// @notice Activates (unpauses) trading along with antibot features
 	function activateTradeWithAntibot() external onlyOwners {
 		require(
 			initialLiquidityAdded,
