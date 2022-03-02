@@ -92,7 +92,7 @@ contract Owners {
 		string memory checkAgainst = "confirm";
 		require(
 			keccak256(bytes(check)) == keccak256(bytes(checkAgainst)),
-			"No renounce, you must give 'confirm' as a parameter"
+			"Can't renounce without 'confirm' as a parameter"
 		);
 		renounced = true;
 		emit OwnershipRenounced(block.timestamp);
