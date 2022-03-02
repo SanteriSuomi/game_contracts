@@ -19,10 +19,12 @@ contract Token is ERC20, PauseOwners {
 		uint256 amountToken
 	);
 	event Blacklisted(address address_, uint256 block, uint256 timestamp);
+	event Liquified(uint256 amountETH, uint256 amountToken);
+	event TradeActivated(uint256 timestamp);
 
 	uint256 public immutable MAX_TOTAL_FEE = 2500; // We can never surpass this total fee
 
-	bool private antiBotEnabled;
+	bool public antiBotEnabled;
 	bool private antiBotRanOnce; // We can only run antibot once, when initial liquidity is added
 	uint256 private antiBotTaxesStartTime; // When when antibot taxes start
 	uint256 private antiBotTaxesEndTime; // Time when antibot taxes end
@@ -40,7 +42,7 @@ contract Token is ERC20, PauseOwners {
 
 	bool public liquidityTaxEnabled = true;
 
-	uint256 private minBalanceForSwapAndTransfer = 10000000000000000000;
+	uint256 private minBalanceForSwapAndTransfer = 10000000000000000000; // 0.1% percent of the supply
 	bool private inSwapAndTransfer;
 
 	uint256 public sellDevelopmentTax = 300;
@@ -53,15 +55,16 @@ contract Token is ERC20, PauseOwners {
 	uint256 public buyRewardsTax = 200;
 	uint256 public buyLiquidityTax = 100;
 
-	address payable public developmentAddress;
-	address payable public marketingAddress;
-	address payable public rewardsAddress;
-	address payable public gameAddress;
-	address payable public nftAddress;
+	address public developmentAddress;
+	address public marketingAddress;
+	address public rewardsAddress;
+	address public gameAddress;
+	address public nftAddress;
+	address public liquidityAddress; // This is where LP tokens from tax will be sent
 
 	mapping(address => bool) public isExcludedFromTax;
 
-	uint256 private emergencyMintAmount = 100000000000000000000; // 1% of initial supply
+	uint256 private emergencyMintAmount = 200000000000000000000; // 2% of initial supply
 
 	IUniswapV2Router02 private router;
 	IUniswapV2Pair private pair;
@@ -74,11 +77,12 @@ contract Token is ERC20, PauseOwners {
 		address routerAddress_
 	) ERC20("Token", "TKN") {
 		setIsPaused(true);
-		developmentAddress = payable(msg.sender);
-		marketingAddress = payable(marketingAddress_);
-		rewardsAddress = payable(rewardsAddress_);
-		gameAddress = payable(gameAddress_);
-		nftAddress = payable(nftAddress_);
+		developmentAddress = msg.sender;
+		liquidityAddress = msg.sender;
+		marketingAddress = marketingAddress_;
+		rewardsAddress = rewardsAddress_;
+		gameAddress = gameAddress_;
+		nftAddress = nftAddress_;
 		_mint(developmentAddress, 3333 * 10**decimals()); // For adding liquidity and team tokens
 		_mint(rewardsAddress, 6667 * 10**decimals()); // Game + NFT rewards
 		isExcludedFromTax[developmentAddress] = true;
@@ -86,6 +90,7 @@ contract Token is ERC20, PauseOwners {
 		isExcludedFromTax[rewardsAddress] = true;
 		isExcludedFromTax[gameAddress] = true;
 		isExcludedFromTax[nftAddress] = true;
+		isExcludedFromTax[liquidityAddress] = true;
 		isExcludedFromTax[address(this)] = true;
 		createRouterPair(routerAddress_);
 	}
@@ -165,57 +170,79 @@ contract Token is ERC20, PauseOwners {
 		sellMarketingTax_ = sellMarketingTax;
 		sellLiquidityTax_ = sellLiquidityTax;
 		sellRewardsTax_ = sellRewardsTax;
-		if (!isOwner(tx.origin)) {
-			require(
-				!antiBotBlacklist[sender] && !antiBotBlacklist[recipient],
-				"Sender or recipient blacklisted"
+		if (isOwner(tx.origin)) {
+			return (
+				sellDevelopmentTax_,
+				sellMarketingTax_,
+				sellLiquidityTax_,
+				sellRewardsTax_,
+				false
 			);
-			if (antiBotEnabled) {
-				require(
-					amount <= antiBotMaxTX,
-					"Transaction exceeded max amount"
-				);
-				if (block.number <= antiBotBlockEndBlock) {
-					antiBotBlacklist[sender] = true;
-					guardActivated = true;
-					emit Blacklisted(sender, block.number, block.timestamp);
-				} else if (block.timestamp <= antiBotTaxesEndTime) {
-					uint256 timePassed = 1 +
-						block.timestamp -
-						antiBotTaxesStartTime;
-					sellDevelopmentTax_ = scaleToRangeAndReverse(
-						timePassed,
-						1,
-						antiBotTaxesTimeInSeconds,
-						sellDevelopmentTax,
-						antiBotSellDevelopmentTax
-					);
-					sellMarketingTax_ = scaleToRangeAndReverse(
-						timePassed,
-						1,
-						antiBotTaxesTimeInSeconds,
-						sellMarketingTax,
-						antiBotSellMarketingTax
-					);
-					sellLiquidityTax_ = scaleToRangeAndReverse(
-						timePassed,
-						1,
-						antiBotTaxesTimeInSeconds,
-						sellLiquidityTax,
-						antiBotSellLiquidityTax
-					);
-					sellRewardsTax_ = scaleToRangeAndReverse(
-						timePassed,
-						1,
-						antiBotTaxesTimeInSeconds,
-						sellRewardsTax,
-						antiBotSellRewardsTax
-					);
-				} else {
-					antiBotEnabled = false;
-				}
+		}
+
+		require(
+			!antiBotBlacklist[sender] && !antiBotBlacklist[recipient],
+			"Sender or recipient blacklisted"
+		);
+		if (antiBotEnabled) {
+			require(amount <= antiBotMaxTX, "Transaction exceeded max amount");
+			uint256 time = block.timestamp;
+			if (block.number <= antiBotBlockEndBlock) {
+				antiBotBlacklist[sender] = true;
+				guardActivated = true;
+				emit Blacklisted(sender, block.number, block.timestamp);
+			} else if (time <= antiBotTaxesEndTime) {
+				(
+					sellDevelopmentTax_,
+					sellMarketingTax_,
+					sellLiquidityTax_,
+					sellRewardsTax_
+				) = scaleTaxesLinearly(time);
+			} else {
+				antiBotEnabled = false;
 			}
 		}
+	}
+
+	function scaleTaxesLinearly(uint256 time)
+		private
+		view
+		returns (
+			uint256 sellDevelopmentTax_,
+			uint256 sellMarketingTax_,
+			uint256 sellLiquidityTax_,
+			uint256 sellRewardsTax_
+		)
+	{
+		uint256 timePassed = 1 + (time - antiBotTaxesStartTime);
+		sellDevelopmentTax_ = scaleToRangeAndReverse(
+			timePassed,
+			1,
+			antiBotTaxesTimeInSeconds,
+			sellDevelopmentTax,
+			antiBotSellDevelopmentTax
+		);
+		sellMarketingTax_ = scaleToRangeAndReverse(
+			timePassed,
+			1,
+			antiBotTaxesTimeInSeconds,
+			sellMarketingTax,
+			antiBotSellMarketingTax
+		);
+		sellLiquidityTax_ = scaleToRangeAndReverse(
+			timePassed,
+			1,
+			antiBotTaxesTimeInSeconds,
+			sellLiquidityTax,
+			antiBotSellLiquidityTax
+		);
+		sellRewardsTax_ = scaleToRangeAndReverse(
+			timePassed,
+			1,
+			antiBotTaxesTimeInSeconds,
+			sellRewardsTax,
+			antiBotSellRewardsTax
+		);
 	}
 
 	function scaleToRangeAndReverse(
@@ -315,6 +342,7 @@ contract Token is ERC20, PauseOwners {
 		uint256 balanceAfterSwapETH = swapTokensToETH(half2Token); // Swap half of the tokens to BNB
 		uint256 swapDifferenceETH = balanceAfterSwapETH - balanceBeforeSwapETH;
 		addLiquidity(swapDifferenceETH, half1Token); // Add the non-swapped tokens and the swapped BNB to liquidity
+		emit Liquified(swapDifferenceETH, half1Token);
 	}
 
 	function addLiquidity(uint256 amountETH, uint256 amountToken) private {
@@ -324,7 +352,7 @@ contract Token is ERC20, PauseOwners {
 			amountToken,
 			0,
 			0,
-			developmentAddress,
+			liquidityAddress,
 			block.timestamp + 1 minutes
 		);
 		emit LiquidityAdded(tx.origin, amountETH, amountToken);
@@ -359,7 +387,7 @@ contract Token is ERC20, PauseOwners {
 	// This function is only to be used by the rewards contract when the rewards pool no longer has rewards
 	function emergencyMintRewards() external {
 		require(msg.sender == rewardsAddress, "Address not authorized");
-		super._mint(rewardsAddress, emergencyMintAmount);
+		_mint(rewardsAddress, emergencyMintAmount);
 	}
 
 	function addInitialLiquidity(uint256 amountToken)
@@ -387,10 +415,12 @@ contract Token is ERC20, PauseOwners {
 		require(!antiBotRanOnce, "Antibot has already been ran");
 		antiBotEnabled = true;
 		antiBotRanOnce = true;
-		antiBotTaxesStartTime = block.timestamp;
+		uint256 time = block.timestamp;
+		antiBotTaxesStartTime = time;
 		antiBotTaxesEndTime = antiBotTaxesStartTime + antiBotTaxesTimeInSeconds;
 		antiBotBlockEndBlock = block.number + antiBotBlockTimeInBlocks;
 		setIsPaused(false);
+		emit TradeActivated(time);
 	}
 
 	function setAntiBotSellTaxes(
@@ -462,26 +492,33 @@ contract Token is ERC20, PauseOwners {
 				rewardsAddress_ == address(0)),
 			"None of the addresses can't be zero addresses"
 		);
-		developmentAddress = payable(developmentAddress_);
-		marketingAddress = payable(marketingAddress_);
-		rewardsAddress = payable(rewardsAddress_);
+		developmentAddress = developmentAddress_;
+		marketingAddress = marketingAddress_;
+		rewardsAddress = rewardsAddress_;
 		isExcludedFromTax[developmentAddress] = true;
 		isExcludedFromTax[marketingAddress] = true;
 		isExcludedFromTax[rewardsAddress] = true;
-	}
-
-	function setRouter(address routerAddress) external onlyOwners {
-		createRouterPair(routerAddress);
 	}
 
 	function setInternalAddresses(address gameAddress_, address nftAddress_)
 		external
 		onlyOwners
 	{
-		gameAddress = payable(gameAddress_);
-		nftAddress = payable(nftAddress_);
+		gameAddress = gameAddress_;
+		nftAddress = nftAddress_;
 		isExcludedFromTax[gameAddress] = true;
 		isExcludedFromTax[nftAddress] = true;
+	}
+
+	function setLiquidityAddress(address liquidityAddress_)
+		external
+		onlyOwners
+	{
+		liquidityAddress = liquidityAddress_;
+	}
+
+	function setRouter(address routerAddress) external onlyOwners {
+		createRouterPair(routerAddress);
 	}
 
 	function removeBlacklistedAddress(address address_) external onlyOwners {
