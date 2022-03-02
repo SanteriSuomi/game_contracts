@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
-// @boughtthetopkms on Telegram
 
 pragma solidity >=0.4.22 <0.9.0;
 
 import "./PauseOwners.sol";
-import "./Rewards.sol";
+import "../abstract/AToken.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
@@ -12,7 +11,9 @@ import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "@uniswap/v2-periphery/contracts/libraries/UniswapV2Library.sol";
 
-contract Token is ERC20, PauseOwners {
+/// @title Game token contract
+/// @notice Functions as a reward token for game and NFT contracts
+contract Token is AToken {
 	event LiquidityAdded(
 		address sender,
 		uint256 amountETH,
@@ -22,13 +23,13 @@ contract Token is ERC20, PauseOwners {
 	event Liquified(uint256 amountETH, uint256 amountToken);
 	event TradeActivated(uint256 timestamp);
 
-	uint256 public immutable MAX_TOTAL_FEE = 2500; // We can never surpass this total fee
+	uint256 public immutable MAX_TOTAL_FEE = 2500;
 
 	bool public antiBotEnabled;
-	bool private antiBotRanOnce; // We can only run antibot once, when initial liquidity is added
-	uint256 private antiBotTaxesStartTime; // When when antibot taxes start
-	uint256 private antiBotTaxesEndTime; // Time when antibot taxes end
-	uint256 private antiBotBlockEndBlock; // Block when antibot blacklister no longer works
+	bool private antiBotRanOnce;
+	uint256 private antiBotTaxesStartTime;
+	uint256 private antiBotTaxesEndTime;
+	uint256 private antiBotBlockEndBlock;
 	uint256 private antiBotTaxesTimeInSeconds = 3600;
 	uint256 private antiBotBlockTimeInBlocks = 2;
 	uint256 private antiBotMaxTX = 100000000000000000000; // 1% percent of the supply
@@ -42,7 +43,7 @@ contract Token is ERC20, PauseOwners {
 
 	bool public liquidityTaxEnabled = true;
 
-	uint256 private minBalanceForSwapAndTransfer = 10000000000000000000; // 0.1% percent of the supply
+	uint256 private minBalanceForSwapAndTransfer = 10000000000000000000; // 0.1% of supply
 	bool private inSwapAndTransfer;
 
 	uint256 public sellDevelopmentTax = 300;
@@ -68,6 +69,8 @@ contract Token is ERC20, PauseOwners {
 
 	IUniswapV2Router02 private router;
 	IUniswapV2Pair private pair;
+
+	bool private initialLiquidityAdded;
 
 	constructor(
 		address gameAddress_,
@@ -217,28 +220,28 @@ contract Token is ERC20, PauseOwners {
 		)
 	{
 		uint256 timePassed = 1 + (time - antiBotTaxesStartTime);
-		sellDevelopmentTax_ = scaleToRangeAndReverse(
+		sellDevelopmentTax_ = scaleValueToRangeAndReverse(
 			timePassed,
 			1,
 			antiBotTaxesTimeInSeconds,
 			sellDevelopmentTax,
 			antiBotSellDevelopmentTax
 		);
-		sellMarketingTax_ = scaleToRangeAndReverse(
+		sellMarketingTax_ = scaleValueToRangeAndReverse(
 			timePassed,
 			1,
 			antiBotTaxesTimeInSeconds,
 			sellMarketingTax,
 			antiBotSellMarketingTax
 		);
-		sellLiquidityTax_ = scaleToRangeAndReverse(
+		sellLiquidityTax_ = scaleValueToRangeAndReverse(
 			timePassed,
 			1,
 			antiBotTaxesTimeInSeconds,
 			sellLiquidityTax,
 			antiBotSellLiquidityTax
 		);
-		sellRewardsTax_ = scaleToRangeAndReverse(
+		sellRewardsTax_ = scaleValueToRangeAndReverse(
 			timePassed,
 			1,
 			antiBotTaxesTimeInSeconds,
@@ -247,13 +250,12 @@ contract Token is ERC20, PauseOwners {
 		);
 	}
 
-	function scaleToRangeAndReverse(
-		// Helper function which scales a value to a range and reverses it
+	function scaleValueToRangeAndReverse(
 		uint256 x, // Value to scale
 		uint256 minX, // Minimum value of x
 		uint256 maxX, // Maximum value of x
-		uint256 a, // Range start
-		uint256 b // Range end
+		uint256 a, // Range to scale to start
+		uint256 b // Range to scale to end
 	) private pure returns (uint256) {
 		return (a + b) - ((b - a) * ((x - minX) / (maxX - minX)) + a);
 	}
@@ -390,18 +392,21 @@ contract Token is ERC20, PauseOwners {
 		isExcludedFromTax[address(router)] = true;
 	}
 
-	// This function is only to be used by the rewards contract when the rewards pool no longer has rewards
-	function emergencyMintRewards() external {
+	/// @notice Mints new tokens only as emergency fallback if token reward dries out
+	/// @dev Can only be called by internal reward pool contract
+	function emergencyMint() external override {
 		require(msg.sender == rewardsAddress, "Address not authorized");
 		_mint(rewardsAddress, emergencyMintAmount);
 	}
 
+	/// @notice Add liquidity to the token
+	/// @dev To activate trading with antibot, use activateTradeWithAntibot after this
+	/// @param amountToken Amount of token to add to the LP pool pair
 	function addInitialLiquidity(uint256 amountToken)
 		external
 		payable
 		onlyOwners
 	{
-		// Add initial liquidity and enabled the "anti-bot" feature
 		address routerAddress = address(router);
 		require(routerAddress != address(0), "Router not set yet");
 		require(
@@ -415,9 +420,16 @@ contract Token is ERC20, PauseOwners {
 		_approve(msg.sender, routerAddress, amountToken);
 		super._transfer(msg.sender, address(this), amountToken);
 		addLiquidity(msg.value, amountToken, msg.sender);
+		initialLiquidityAdded = true;
 	}
 
+	/// @notice Activates trading along with antibot features
+	/// @dev Antibot features: max transaction size, linear diminishing taxes, two block blacklist. Can only be ran once
 	function activateTradeWithAntibot() external onlyOwners {
+		require(
+			initialLiquidityAdded,
+			"Whoopsie, did you add initial liquidity yet?"
+		);
 		require(!antiBotRanOnce, "Antibot has already been ran");
 		antiBotEnabled = true;
 		antiBotRanOnce = true;

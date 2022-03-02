@@ -1,26 +1,31 @@
 // SPDX-License-Identifier: MIT
-// @boughtthetopkms on Telegram
 
 pragma solidity >=0.4.22 <0.9.0;
 
 import "./PauseOwners.sol";
-import "./Token.sol";
+import "../abstract/AToken.sol";
+import "../abstract/ARewards.sol";
 
-contract Rewards is PauseOwners {
-	event Withdraw(address to, uint256 amount, address caller);
+/// @title Game token pool with associated functions
+/// @notice Holds all the tokens used by the game
+contract Rewards is ARewards {
+	event WithdrawReward(address to, uint256 amount, address caller);
 
-	Token token;
+	AToken token;
 	address gameAddress;
 	address nftAddress;
 
-	function withdraw(address to, uint256 amountToken) external {
+	/// @notice Withdraw tokens from the pool
+	/// @param to Address to which tokens will be withdrawn to
+	/// @param amountToken Amount of tokens to withdraw
+	/// @dev Will mint tokens if rewards pool is empty. Only usable by in-game contracts
+	function withdrawReward(address to, uint256 amountToken) external override {
 		require(msg.sender == gameAddress || msg.sender == nftAddress);
 		while (token.balanceOf(address(this)) < amountToken) {
-			// Mints new supply for as long as needed
-			token.emergencyMintRewards();
+			token.emergencyMint();
 		}
 		require(token.transfer(to, amountToken), "Token withdraw failed");
-		emit Withdraw(to, amountToken, msg.sender);
+		emit WithdrawReward(to, amountToken, msg.sender);
 	}
 
 	function setAddresses(
@@ -28,7 +33,7 @@ contract Rewards is PauseOwners {
 		address gameAddress_,
 		address nftAddress_
 	) external onlyOwners {
-		token = Token(payable(tokenAddress_));
+		token = AToken(tokenAddress_);
 		gameAddress = gameAddress_;
 		nftAddress = nftAddress_;
 	}
