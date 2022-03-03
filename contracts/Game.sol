@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: MIT
-// @boughtthetopkms on Telegram
 
 pragma solidity >=0.4.22 <0.9.0;
 
 import "./PauseOwners.sol";
-import "./NFT.sol";
-import "./Token.sol";
+import "../abstract/AToken.sol";
+import "../abstract/ANFT.sol";
+import "../abstract/AGame.sol";
 
-contract Game is PauseOwners {
-	NFT private nft;
-	Token private token;
+contract Game is AGame {
+	AToken private token;
+	ANFT private nft;
 
-	function setAddresses(address nftAddress, address tokenAddress)
-		external
-		onlyOwners
-	{
-		nft = NFT(payable(nftAddress));
-		token = Token(payable(tokenAddress));
+	function setToken(address tokenAddress_) external onlyOwners {
+		token = AToken(tokenAddress_);
+	}
+
+	function setNFT(address nftAddress_) external onlyOwners {
+		nft = ANFT(nftAddress_);
 	}
 }

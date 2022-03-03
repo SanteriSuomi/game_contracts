@@ -16,25 +16,17 @@ module.exports = async function (deployer, network, accounts) {
 };
 
 async function testnetMigration(deployer, accounts) {
-	// Deploy NFT contract
 	await deployer.deploy(NFT, { from: accounts[0] });
 }
 
 async function localforkMigration(deployer, accounts) {
-	// Deploy NFT contract
 	await deployer.deploy(NFT, { from: accounts[0] });
 	const nftContract = await NFT.deployed();
-
-	// Deploy game contract itself
 	await deployer.deploy(Game, { from: accounts[0] });
 	const gameContract = await Game.deployed();
-
-	// Deploy Rewards contract
 	await deployer.deploy(Rewards, { from: accounts[0] });
 	const rewardsContract = await Rewards.deployed();
 
-	// Deploy ERC20 token contract and feed it game and NFT contracts (to mint tokens for them).
-	// Deployer wallet is to be used as development wallet
 	await deployer.deploy(
 		Token,
 		gameContract.address,
@@ -48,8 +40,10 @@ async function localforkMigration(deployer, accounts) {
 	);
 	const tokenContract = await Token.deployed();
 
+	await rewardsContract.setToken.sendTransaction(tokenContract.address, {
+		from: accounts[0],
+	});
 	await rewardsContract.setAddresses.sendTransaction(
-		tokenContract.address,
 		gameContract.address,
 		nftContract.address,
 		{
@@ -57,23 +51,19 @@ async function localforkMigration(deployer, accounts) {
 		}
 	);
 
-	// Set game contract NFT & ERC20 token contract addresses
-	await gameContract.setAddresses.sendTransaction(
-		nftContract.address,
-		tokenContract.address,
-		{
-			from: accounts[0],
-		}
-	);
+	await gameContract.setToken.sendTransaction(tokenContract.address, {
+		from: accounts[0],
+	});
+	await gameContract.setNFT.sendTransaction(nftContract.address, {
+		from: accounts[0],
+	});
 
-	// Finally, set the ERC20 token contract address on the NFT contract
-	await nftContract.setAddresses.sendTransaction(
-		tokenContract.address,
-		rewardsContract.address,
-		{
-			from: accounts[0],
-		}
-	);
+	await nftContract.setToken.sendTransaction(tokenContract.address, {
+		from: accounts[0],
+	});
+	await nftContract.setRewards.sendTransaction(rewardsContract.address, {
+		from: accounts[0],
+	});
 
 	// Approve token contract to spend deployer's development tokens
 	await tokenContract.approve.sendTransaction(

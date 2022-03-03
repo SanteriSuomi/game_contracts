@@ -8,7 +8,6 @@ import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 
 /// @title Abstract class representing game NFTs
-/// @dev To improve modularity, so we don't have to hardcode the contract itself
 abstract contract ANFT is
 	ERC721,
 	ERC721Enumerable,

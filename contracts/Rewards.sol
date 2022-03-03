@@ -27,12 +27,14 @@ contract Rewards is ARewards {
 		emit WithdrawReward(to, amountToken, msg.sender);
 	}
 
-	function setAddresses(
-		address tokenAddress_,
-		address gameAddress_,
-		address nftAddress_
-	) external onlyOwners {
+	function setToken(address tokenAddress_) external onlyOwners {
 		token = AToken(tokenAddress_);
+	}
+
+	function setAddresses(address gameAddress_, address nftAddress_)
+		external
+		onlyOwners
+	{
 		gameAddress = gameAddress_;
 		nftAddress = nftAddress_;
 	}

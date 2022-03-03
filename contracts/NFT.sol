@@ -305,11 +305,11 @@ contract NFT is ANFT {
 		presalePrice = presalePrice_;
 	}
 
-	function setAddresses(address tokenAddress_, address rewardsAddress_)
-		external
-		onlyOwners
-	{
+	function setToken(address tokenAddress_) external onlyOwners {
 		token = AToken(tokenAddress_);
+	}
+
+	function setRewards(address rewardsAddress_) external onlyOwners {
 		rewards = ARewards(rewardsAddress_);
 	}
 
