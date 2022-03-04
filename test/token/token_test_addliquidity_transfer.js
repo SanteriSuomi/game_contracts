@@ -79,7 +79,7 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 
 		const reserve0 = web3.utils.toBN(reserves.reserve0);
 		const reserve1 = web3.utils.toBN(reserves.reserve1);
-		const zero = web3.utils.toBN(0);
+		const zero = web3.utils.toBN("0");
 		assert.equal(
 			reserve0.gt(zero) && reserve1.gt(zero) && reserve0.gt(reserve1),
 			true
@@ -149,61 +149,117 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 	});
 
 	it("Taxes Are Correct When Selling And Antibot Is Activated", async () => {
-		await testTaxes(7, "25000000000000000000");
+		await taxesCorrect(7, "20000000000000000000", "sell");
 	});
 
 	it("Taxes Are Correct When Selling And Antibot Is Deactivated", async () => {
 		await time.increase(4000);
-		await testTaxes(8, "12000000000000000000");
+		await taxesCorrect(8, "10000000000000000000", "sell");
 	});
 
-	async function testTaxes(accountNumber, mustEqualTax) {
-		let sellAmount = web3.utils.toBN("100000000000000000000"); // Hundred tokens converted to token decimals
-		await token.transfer.sendTransaction(
-			accounts[accountNumber],
-			web3.utils.toBN("100000000000000000000"),
-			{
-				from: accounts[0],
-			}
-		); // Transfer some balance to account 5 from deployer for testing
-		await token.approve.sendTransaction(
-			router.options.address,
-			sellAmount,
-			{
-				from: accounts[accountNumber],
-			}
-		);
-		let deadline = (await time.latest()) + 120; // Two minutes
-		let tokenPath = [token.address, wethAddress];
+	it("Taxes Are Correct When Buying", async () => {
+		await taxesCorrect(4, "5000000000000000000", "buy");
+	});
+
+	async function taxesCorrect(accountNumber, mustEqualTax, txType) {
+		mustEqualTax = web3.utils.toBN(mustEqualTax);
+
 		let rewardsAddressBalanceBefore = await token.balanceOf.call(
 			rewards.address
 		);
-		await router.methods
-			.swapExactTokensForETHSupportingFeeOnTransferTokens(
-				sellAmount,
-				0, // Any amount
-				tokenPath,
-				accounts[accountNumber],
-				deadline
-			)
-			.send({
-				from: accounts[accountNumber],
-				gas: "5000000",
-			});
-		let tokenAddressBalance = await token.balanceOf.call(token.address);
+		let tokenAddressBalanceBefore = await token.balanceOf.call(
+			token.address
+		);
+
+		let deadline = (await time.latest()) + 120; // Two minutes
+		if (txType === "sell") {
+			await sell(accounts, accountNumber, deadline);
+		} else if (txType === "buy") {
+			await buy(accounts, accountNumber, deadline);
+		}
+
 		let rewardsAddressBalanceAfter = await token.balanceOf.call(
 			rewards.address
 		);
-		let rewardsAddressBalanceDifference = rewardsAddressBalanceAfter.sub(
-			rewardsAddressBalanceBefore
+		let tokenAddressBalanceAfter = await token.balanceOf.call(
+			token.address
 		);
-		let mustEqualTaxBN = web3.utils.toBN(mustEqualTax);
-		let added = tokenAddressBalance.add(rewardsAddressBalanceDifference);
-		let decimalSub = web3.utils.toBN("10000000000000000000");
+
+		let rewardsAddressBalanceDifference;
+		if (rewardsAddressBalanceAfter.lt(rewardsAddressBalanceBefore)) {
+			rewardsAddressBalanceDifference = rewardsAddressBalanceBefore.sub(
+				rewardsAddressBalanceAfter
+			);
+		} else {
+			rewardsAddressBalanceDifference = rewardsAddressBalanceAfter.sub(
+				rewardsAddressBalanceBefore
+			);
+		}
+
+		let tokenAddressBalanceDifference;
+		if (tokenAddressBalanceAfter.lt(tokenAddressBalanceBefore)) {
+			tokenAddressBalanceDifference = tokenAddressBalanceBefore.sub(
+				tokenAddressBalanceAfter
+			);
+		} else {
+			tokenAddressBalanceDifference = tokenAddressBalanceAfter.sub(
+				tokenAddressBalanceBefore
+			);
+		}
+
+		let added = tokenAddressBalanceDifference.add(
+			rewardsAddressBalanceDifference
+		);
+
+		let decimalSub = web3.utils.toBN("1000000000000000000");
 		assert.equal(
-			added.gt(mustEqualTaxBN.sub(decimalSub)) &&
-				added.lt(mustEqualTaxBN.add(decimalSub)),
+			added.gt(mustEqualTax.sub(decimalSub)) &&
+				added.lt(mustEqualTax.add(decimalSub)),
 			true
 		);
+	}
+
+	async function sell(accs, accNum, deadline) {
+		let amount = web3.utils.toBN("100000000000000000000"); // Hundred tokens converted to token decimals
+		await token.transfer.sendTransaction(
+			accs[accNum],
+			web3.utils.toBN("100000000000000000000"),
+			{
+				from: accs[0],
+			}
+		); // Transfer some balance to account 5 from deployer for testing
+		await token.approve.sendTransaction(router.options.address, amount, {
+			from: accs[accNum],
+		});
+
+		let tokenPath = [token.address, wethAddress];
+		await router.methods
+			.swapExactTokensForETHSupportingFeeOnTransferTokens(
+				amount,
+				0, // Any amount
+				tokenPath,
+				accs[accNum],
+				deadline
+			)
+			.send({
+				from: accs[accNum],
+				gas: "5000000",
+			});
+	}
+
+	async function buy(accs, accNum, deadline) {
+		let tokenPath = [wethAddress, token.address];
+		await router.methods
+			.swapExactETHForTokensSupportingFeeOnTransferTokens(
+				0,
+				tokenPath,
+				accs[accNum],
+				deadline
+			)
+			.send({
+				value: web3.utils.toBN("1000000000000000000"), // 1 eth
+				from: accs[accNum],
+				gas: "5000000",
+			});
 	}
 });

@@ -3,7 +3,7 @@
 pragma solidity >=0.4.22 <0.9.0;
 
 import "./PauseOwners.sol";
-import "../abstract/AToken.sol";
+import "./abstract/AToken.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
@@ -23,38 +23,38 @@ contract Token is AToken {
 	event Liquified(uint256 amountETH, uint256 amountToken);
 	event TradeActivated(uint256 timestamp);
 
-	uint256 public immutable MAX_TOTAL_FEE = 2500;
+	uint256 public immutable MAX_TOTAL_FEE = 2000;
 
 	bool public antiBotEnabled;
 	bool private antiBotRanOnce;
 	uint256 private antiBotTaxesStartTime;
 	uint256 private antiBotTaxesEndTime;
 	uint256 private antiBotBlockEndBlock;
-	uint256 private antiBotTaxesTimeInSeconds = 3600;
+	uint256 private antiBotTaxesTimeInSeconds = 600;
 	uint256 private antiBotBlockTimeInBlocks = 2;
-	uint256 private antiBotMaxTX = 100000000000000000000; // 1% percent of the supply
+	uint256 private antiBotMaxTX = 100000000000000000000;
 
-	uint256 public antiBotSellDevelopmentTax = 900;
-	uint256 public antiBotSellMarketingTax = 900;
-	uint256 public antiBotSellRewardsTax = 400;
+	uint256 public antiBotSellDevelopmentTax = 600;
+	uint256 public antiBotSellMarketingTax = 600;
+	uint256 public antiBotSellRewardsTax = 500;
 	uint256 public antiBotSellLiquidityTax = 300;
 
 	mapping(address => bool) public antiBotBlacklist;
 
 	bool public liquidityTaxEnabled = true;
 
-	uint256 private minBalanceForSwapAndTransfer = 10000000000000000000; // 0.1% of supply
+	uint256 private minBalanceForSwapAndTransfer = 10000000000000000000;
 	bool private inSwapAndTransfer;
 
 	uint256 public sellDevelopmentTax = 300;
 	uint256 public sellMarketingTax = 300;
-	uint256 public sellRewardsTax = 400;
-	uint256 public sellLiquidityTax = 200;
+	uint256 public sellRewardsTax = 250;
+	uint256 public sellLiquidityTax = 150;
 
-	uint256 public buyDevelopmentTax = 200;
-	uint256 public buyMarketingTax = 200;
-	uint256 public buyRewardsTax = 200;
-	uint256 public buyLiquidityTax = 100;
+	uint256 public buyDevelopmentTax = 150;
+	uint256 public buyMarketingTax = 150;
+	uint256 public buyRewardsTax = 125;
+	uint256 public buyLiquidityTax = 75;
 
 	address public developmentAddress;
 	address public marketingAddress;
@@ -65,7 +65,7 @@ contract Token is AToken {
 
 	mapping(address => bool) public isExcludedFromTax;
 
-	uint256 private emergencyMintAmount = 200000000000000000000; // 2% of initial supply
+	uint256 private emergencyMintAmount = 100000000000000000000;
 
 	IUniswapV2Router02 private router;
 	IUniswapV2Pair private pair;
@@ -129,10 +129,10 @@ contract Token is AToken {
 			!isExcludedFromTax[recipient];
 		uint256 tokenBalance = balanceOf(address(this));
 		if (
+			notExcludedFromTax &&
 			!inSwapAndTransfer &&
 			tokenBalance >= minBalanceForSwapAndTransfer &&
-			recipient == address(pair) && // Is a sell
-			notExcludedFromTax
+			recipient == address(pair) // Is a sell
 		) {
 			swapAndTransfer(
 				tokenBalance,
@@ -142,14 +142,13 @@ contract Token is AToken {
 			);
 		}
 
-		bool takeFee = !inSwapAndTransfer && notExcludedFromTax;
-		if (takeFee) {
-			uint256[] memory taxes = new uint256[](4); // Need to do this abomination because otherwise solidity compiler screams
-			taxes[0] = sellDevelopmentTax_;
-			taxes[1] = sellMarketingTax_;
-			taxes[2] = sellLiquidityTax_;
-			taxes[3] = sellRewardsTax_;
-			amount = takeFees(amount, sender, recipient, taxes);
+		if (notExcludedFromTax && !inSwapAndTransfer) {
+			uint256[] memory sellTaxes = new uint256[](4); // Need to do this abomination because otherwise solidity compiler screams
+			sellTaxes[0] = sellDevelopmentTax_;
+			sellTaxes[1] = sellMarketingTax_;
+			sellTaxes[2] = sellLiquidityTax_;
+			sellTaxes[3] = sellRewardsTax_;
+			amount = takeFees(amount, sender, recipient, sellTaxes);
 		}
 
 		super._transfer(sender, recipient, amount);
@@ -343,10 +342,10 @@ contract Token is AToken {
 		uint256 half1Token = amountToken / 2;
 		uint256 half2Token = amountToken - half1Token;
 		uint256 balanceBeforeSwapETH = address(this).balance;
-		uint256 balanceAfterSwapETH = swapTokensToETH(half2Token); // Swap half of the tokens to BNB
+		uint256 balanceAfterSwapETH = swapTokensToETH(half1Token); // Swap half of the tokens to BNB
 		uint256 swapDifferenceETH = balanceAfterSwapETH - balanceBeforeSwapETH;
-		addLiquidity(swapDifferenceETH, half1Token, liquidityAddress); // Add the non-swapped tokens and the swapped BNB to liquidity
-		emit Liquified(swapDifferenceETH, half1Token);
+		addLiquidity(swapDifferenceETH, half2Token, liquidityAddress); // Add the non-swapped tokens and the swapped BNB to liquidity
+		emit Liquified(swapDifferenceETH, half2Token);
 	}
 
 	function addLiquidity(
@@ -394,6 +393,7 @@ contract Token is AToken {
 
 	/// @notice Mints new tokens but only in case of token reward pool drying out
 	function emergencyMint() external override {
+		require(msg.sender != address(0), "Not callable by zero address");
 		require(msg.sender == rewardsAddress, "Address not authorized");
 		_mint(rewardsAddress, emergencyMintAmount);
 	}

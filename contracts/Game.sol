@@ -3,9 +3,9 @@
 pragma solidity >=0.4.22 <0.9.0;
 
 import "./PauseOwners.sol";
-import "../abstract/AToken.sol";
-import "../abstract/ANFT.sol";
-import "../abstract/AGame.sol";
+import "./abstract/AToken.sol";
+import "./abstract/ANFT.sol";
+import "./abstract/AGame.sol";
 
 contract Game is AGame {
 	AToken private token;
