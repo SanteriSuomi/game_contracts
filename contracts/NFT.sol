@@ -51,8 +51,6 @@ contract NFT is ANFT {
 		uint256 date; // Date this NFT was minted
 		uint256 locked; // Amount of tokens currently locked in this NFT
 		uint256 claimed; // Date last rewards were last claimed, if not claimed once, same as birth
-
-		// TO:DO other game-specific fields?
 	}
 
 	constructor() ERC721("NFT", "NFT") {
@@ -161,7 +159,6 @@ contract NFT is ANFT {
 		uint256 newLevel = newLocked / tokensPerLevel;
 		uint256 amountExcess = 0;
 		if (newLevel >= maxTokenLevel) {
-			// If compounding amount excees max level
 			amountExcess = newLocked - (maxTokenLevel * tokensPerLevel);
 			data.locked = newLocked - amountExcess;
 			data.level = maxTokenLevel;

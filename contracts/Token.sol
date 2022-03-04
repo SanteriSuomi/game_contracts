@@ -22,6 +22,8 @@ contract Token is AToken {
 	event Blacklisted(address address_, uint256 block, uint256 timestamp);
 	event Liquified(uint256 amountETH, uint256 amountToken);
 	event TradeActivated(uint256 timestamp);
+	event Sell(address sender, address recipient, uint256 amount);
+	event Buy(address sender, address recipient, uint256 amount);
 
 	uint256 public immutable MAX_TOTAL_FEE = 2000;
 
@@ -277,12 +279,14 @@ contract Token is AToken {
 			marketingTax = (amount * sellTaxes[1]) / 10000;
 			liquidityTax = (amount * sellTaxes[2]) / 10000;
 			rewardsTax = (amount * sellTaxes[3]) / 10000;
+			emit Sell(sender, recipient, amount);
 		} else if (sender == address(pair)) {
 			// Buying
 			developmentTax = (amount * buyDevelopmentTax) / 10000;
 			marketingTax = (amount * buyMarketingTax) / 10000;
 			liquidityTax = (amount * buyLiquidityTax) / 10000;
 			rewardsTax = (amount * buyRewardsTax) / 10000;
+			emit Buy(sender, recipient, amount);
 		}
 		totalTax = developmentTax + marketingTax + liquidityTax + rewardsTax;
 

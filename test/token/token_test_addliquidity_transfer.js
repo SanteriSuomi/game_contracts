@@ -158,11 +158,11 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 	});
 
 	it("Taxes Are Correct When Buying", async () => {
-		await taxesCorrect(4, "5000000000000000000", "buy");
+		await taxesCorrect(4, "9000000000000000000", "buy");
 	});
 
-	async function taxesCorrect(accountNumber, mustEqualTax, txType) {
-		mustEqualTax = web3.utils.toBN(mustEqualTax);
+	async function taxesCorrect(accountNumber, mustEqualTotalEndTax, txType) {
+		mustEqualTotalEndTax = web3.utils.toBN(mustEqualTotalEndTax);
 
 		let rewardsAddressBalanceBefore = await token.balanceOf.call(
 			rewards.address
@@ -213,8 +213,8 @@ contract("Token Test Add Liquidity And Transfer", async (accounts) => {
 
 		let decimalSub = web3.utils.toBN("1000000000000000000");
 		assert.equal(
-			added.gt(mustEqualTax.sub(decimalSub)) &&
-				added.lt(mustEqualTax.add(decimalSub)),
+			added.gt(mustEqualTotalEndTax.sub(decimalSub)) &&
+				added.lt(mustEqualTotalEndTax.add(decimalSub)),
 			true
 		);
 	}
